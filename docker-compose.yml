@@ -1,5 +1,8 @@
 version: '2'
 
+networks:
+  my_network:
+    driver: bridge
 services:
   app:
     image: fastapi:latest
@@ -24,21 +27,26 @@ services:
     volumes:
       - ./nifi:/opt/nifi/nifi-current/conf:ro
     environment:
-      - NIFI_WEB_HTTP_PORT=8080
-      - NIFI_USERNAME=admin
-      - NIFI_PASSWORD=admin
-      - NIFI_WEB_PROXY_CONTEXT_PATH=/nifi
+      SINGLE_USER_CREDENTIALS_USERNAME=admin
+      SINGLE_USER_CREDENTIALS_PASSWORD=admin
     depends_on:
       - minio
+      - fastapi
+      - ollama
+    command: 
+      - apt-get update && apt-get install -y python3-pip && pip3 install requests
+      - pip install pandas, numpy
   
   mariadb:
     image: mariadb:latest
     name: mariadb
     environment:
-      MYSQL_ROOT_PASSWORD: admin
-      MYSQL_DATABASE: fashionworld
-      MYSQL_USER: admin
-      MYSQL_PASSWORD: admin
+      MARIADB_ROOT_DATABASE: fashionworld
+      MARIADB_PASSWORD: admin
+      MARIADB_ROOT_PASSWORD: admin
+      MARIADB_USER: admin
+    volumes:
+      - ./mariadb
     networks:
       - my_network
   
@@ -56,7 +64,12 @@ services:
     name: minio
     networks:
       - my_network
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: admin
+    volumes:
+      - ./minio:/data:rw
     command: server /data
