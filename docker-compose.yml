@@ -1,0 +1,62 @@
+version: '2'
+
+services:
+  app:
+    image: fastapi:latest
+    ports:
+      - "8000:8000"
+    name: app
+    volumes:
+      - ./app:/app:rw
+    networks:
+      - my_network
+    depends_on:
+      - mariadb
+    command: uvicorn app.main:app --reload
+
+  nifi:
+    image: apache/nifi:latest
+    name: nifi
+    networks:
+      - my_network
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nifi:/opt/nifi/nifi-current/conf:ro
+    environment:
+      - NIFI_WEB_HTTP_PORT=8080
+      - NIFI_USERNAME=admin
+      - NIFI_PASSWORD=admin
+      - NIFI_WEB_PROXY_CONTEXT_PATH=/nifi
+    depends_on:
+      - minio
+  
+  mariadb:
+    image: mariadb:latest
+    name: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: fashionworld
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+    networks:
+      - my_network
+  
+  ollama:
+    image: ollama/ollama:latest
+    name: ollama
+    networks:
+      - my_network
+    volumes:
+      - ./ollama:/root/.ollama:rw
+    command: "ollama pull llama3.2:4b"
+
+  minio:
+    image: minio/minio:latest
+    name: minio
+    networks:
+      - my_network
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin
+    command: server /data
