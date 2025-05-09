@@ -10,7 +10,7 @@ def add_initial_data(db: Session, supplier_id: Sequence):
     supplier_product_relation = []
     products = []
     packaging = []
-    with open('./csv/supplierproducts.csv', 'r') as file:
+    with open('./csv/supplierproducts_short.csv', 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             supplier_name = row['SupplierName'].strip()

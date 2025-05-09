@@ -72,15 +72,15 @@ class Orders(Base):
     __tablename__ = 'orders'
     order_id:Mapped[str] = mapped_column(String(8), nullable=False, index=True)
     item_no:Mapped[str] = mapped_column(Integer, nullable=False)
-    supplier_order_id:Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     boxes_ordered:Mapped[int] = mapped_column(Integer, nullable=False)
-    created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False,default=func.now())
     order_placed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    order_due_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    order_confirmed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    order_filled_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
-    order_status:Mapped[str] = mapped_column(String(25), nullable=False, default="pending")
+    supplier_order_id:Mapped[str] = mapped_column(String(20), nullable=True, index=True)
+    order_confirmed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # When supplier confirmed order
+    order_due_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # TAT of order
+    order_filled_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # when order was completed (last material recieved)
+    order_status:Mapped[str] = mapped_column(String(25), nullable=False, default="pending") # Status of order
+    last_updated:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_orderitems")
     order_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_orders")

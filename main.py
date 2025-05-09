@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 import ollama
-from validations import ModelandText, SupplierProducts, Product, Supplier, Item
+from validations import ModelandText, SupplierProducts, Product, Supplier, PlaceOrder, ConfirmOrder
 import models
 from database import engine, get_db, SessionLocal
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ ollama_client = ollama.Client(host="http://localhost:11434")
 
 
 metadata = models.Base.metadata
-metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
+# metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
 product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
 order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
@@ -27,7 +27,7 @@ db_dependency = Annotated[Session, Depends(get_db)]
 async def lifespan(app: FastAPI):
     # Code to run on startup
     db: Session = SessionLocal()
-    add_initial_data(db,supplier_id) # Add data from CSV
+    # add_initial_data(db,supplier_id) # Add data from CSV
     #add scorecard and then incidents
     db.close()
     yield
@@ -188,24 +188,51 @@ async def add_supplier_product(info:List[SupplierProducts], db: db_dependency):
             continue
     return {"message": "Supplier product added successfully", "supplier_id":supplier_id, "products_ids": products_ids}
 
-@app.post("/api/db/order/place", status_code=status.HTTP_201_CREATED)
-async def place_order(order: List[Item], db: db_dependency):
-    if not order:
+@app.post("/api/db/orders/place", status_code=status.HTTP_201_CREATED)
+async def place_order(orders: List[PlaceOrder], db: db_dependency):
+    if not orders:
         raise HTTPException(status_code=400, detail="No order information provided.")
     
     order_ids = []
     db_orders = []
-    next_id_val = db.execute(select(order_id.next_value())).scalar_one()
-    generated_order_id = f"ORD{next_id_val:05d}"
-    order_ids.append(generated_order_id)
-    for item in order:
-        print(f"\n\n{item}\n\n")
-        item.order_id = generated_order_id
-        db_orders.append(models.Orders(**item.model_dump()))
+    for order in orders:
+        next_id_val = db.execute(select(order_id.next_value())).scalar_one()
+        generated_order_id = f"ORD{next_id_val:05d}"
+        order.order_id = generated_order_id
+        for i,item in enumerate(order.items):
+            db_orders.append(models.Orders(
+                order_id=order.order_id,
+                item_no=i+1,
+                product_id=item.product_id,
+                boxes_ordered=item.boxes_ordered,
+                order_placed_date=order.order_placed_date
+                )
+            )
 
     db.add_all(db_orders)
     db.commit()
-    return {"message": "Order placed successfully", "order_id": order_ids, "order": order}
+    return {"message": "Order placed successfully", "order_id": order_ids, "order": orders}
+
+@app.put("/api/db/orders/confirm", status_code=status.HTTP_202_ACCEPTED)
+async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
+    db_orders = []
+    not_found = []
+    for order in orders:
+        print(f"\n\n\n{order.order_id}\n\n\n")
+        db_order = db.query(models.Orders).filter(models.Orders.order_id==order.order_id).all()
+        if db_order:
+            for order_update in db_order:
+                db_orders.append(order_update.order_id)
+                order_update.order_confirmed_date = order.order_confirmed_date
+                order_update.order_status = order.order_status
+                order_update.supplier_order_id = order.supplier_order_id
+                order_update.last_updated = order.last_updated
+        else:
+            not_found.append(order.order_id)
+
+    db.commit()
+    return {"message":"Orders Confirmed", "orders_id":db_orders, "orders_not_found":not_found}
+    
 
 @app.get("/")
 def read_root():

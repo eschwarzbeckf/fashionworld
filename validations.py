@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
+from datetime import datetime
 
 class ModelandText(BaseModel):
     model_name: str = Field(default="gemma:2b", description="The name of the model to use for processing the email content.")
@@ -25,13 +26,18 @@ class SupplierProducts(BaseModel):
 class Item(BaseModel):
     product_id: str = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the product.")
     boxes_ordered: int = Field(default=1, description="The number of boxes ordered.")
-    order_id: Optional[str] = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the order.")
 
 class PlaceOrder(BaseModel):
-    order_id: Optional[str] = Field(description="Id of the order")
-    item_number: Optional[str] = Field(description="Order of the item in the order")
-    order: List[SupplierProducts]
-    boxes_ordered: float = Field(float, max_digits=2, description="Number of poxes per product")
-    supplier_order: Optional[str] = Field(min_length=6, description="Order on the supplier side")
+    order_id: Optional[str] = Field(description="Id of the order", default=None)
+    order_placed_date: datetime = Field(description="Date when order was placed/created", default=datetime.now())
+    items: List[Item] = Field(description="List of the items in the order")
+
+class ConfirmOrder(BaseModel):
+    order_id: str = Field(description="Id of the order")
+    supplier_order_id: str = Field(description="Supplier order number on their end", default=None)
+    order_confirmed_date:Optional[datetime] = Field(description="Date when order is confirmed", default=datetime.now())
+    order_status:Optional[str] = Field(description="Status of the order", default="confirmed")
+    last_updated:Optional[datetime] = Field(description="Last time record was updated", default=datetime.now())
+    
 
 
