@@ -15,7 +15,10 @@ services:
       - my_network
     depends_on:
       - mariadb
-    command: uvicorn app.main:app --reload
+      - ollama
+    command: 
+     - pip install -r requirements.txt
+     - uvicorn app.main:app --reload
 
   nifi:
     image: apache/nifi:latest
@@ -33,6 +36,7 @@ services:
       - minio
       - fastapi
       - ollama
+      - mariadb
     command: 
       - apt-get update && apt-get install -y python3-pip && pip3 install requests
       - pip install pandas, numpy
@@ -72,4 +76,3 @@ services:
       MINIO_ROOT_PASSWORD: admin
     volumes:
       - ./minio:/data:rw
-    command: server /data

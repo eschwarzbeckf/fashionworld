@@ -26,3 +26,12 @@ class Item(BaseModel):
     product_id: str = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the product.")
     boxes_ordered: int = Field(default=1, description="The number of boxes ordered.")
     order_id: Optional[str] = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the order.")
+
+class PlaceOrder(BaseModel):
+    order_id: Optional[str] = Field(description="Id of the order")
+    item_number: Optional[str] = Field(description="Order of the item in the order")
+    order: List[SupplierProducts]
+    boxes_ordered: float = Field(float, max_digits=2, description="Number of poxes per product")
+    supplier_order: Optional[str] = Field(min_length=6, description="Order on the supplier side")
+
+

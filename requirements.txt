@@ -4,4 +4,3 @@ ollama
 sqlalchemy
 pymysql
 pandas
-load_dotenv

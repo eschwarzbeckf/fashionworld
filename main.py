@@ -28,10 +28,11 @@ async def lifespan(app: FastAPI):
     # Code to run on startup
     db: Session = SessionLocal()
     add_initial_data(db,supplier_id) # Add data from CSV
+    #add scorecard and then incidents
+    db.close()
     yield
     # Code to run on shutdown (optional)
     print("Application shutdown.")
-    db.close()
 
 
 app= FastAPI(lifespan=lifespan)
