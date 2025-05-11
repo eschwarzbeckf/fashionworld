@@ -53,7 +53,7 @@ class Packaging(Base):
     suggested_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)
     suggested_quantity:Mapped[float] = mapped_column(Float, nullable=False)
     suggested_layout:Mapped[str] = mapped_column(String(25), nullable=False)
-    created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False, default=func.now())
+    created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     last_updated_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     parent_products:Mapped["Products"] = relationship(back_populates="product_id_packaging")

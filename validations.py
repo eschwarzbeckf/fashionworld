@@ -51,9 +51,9 @@ class RecievedPackage(BaseModel):
 
 class UpdatePackage(BaseModel):
     product_id: str = Field(description="Id of the product to update")
-    new_method: Optional[Literal['method1','method2','method3']] = Field(description="New Method")
-    new_layout: Optional[Literal['layouta','layoutb','layoutc','layoutd','layoute','layoutf','layoutg','layouth']] = Field(description="new Layout")
-    new_suggested_quantity: Optional[int] = Field(description="New packaging quantity per box")
+    new_method: Optional[Literal['method1','method2','method3']] = Field(description="New Method", default=None)
+    new_layout: Optional[Literal['layouta','layoutb','layoutc','layoutd','layoute','layoutf','layoutg','layouth']] = Field(description="new Layout", default=None)
+    new_suggested_quantity: Optional[int] = Field(description="New packaging quantity per box", default=None)
     last_updated: datetime = Field(description="Updated time", default=datetime.now())
 
 

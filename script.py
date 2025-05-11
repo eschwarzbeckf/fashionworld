@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import Sequence, select, exists, text
 import models
 import csv
+from datetime import datetime
 
 def add_initial_data(db: Session, supplier_id: Sequence):
     print("Application startup: Initializing...")
@@ -56,7 +57,8 @@ def add_initial_data(db: Session, supplier_id: Sequence):
                         revision=1,
                         suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
                         suggested_quantity=row['ProposedUnitsPerCarton'].strip(),
-                        suggested_layout=row['ProposedLayout'].strip().lower()
+                        suggested_layout=row['ProposedLayout'].strip().lower(),
+                        created_date=datetime.now()
                     ))
                 else:
                     packaging.append(models.Packaging(
@@ -64,7 +66,9 @@ def add_initial_data(db: Session, supplier_id: Sequence):
                         revision=db_packaging.revision + 1,
                         suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
                         suggested_quantity=row['ProposedUnitsPerCarton'].strip(),
-                        suggested_layout=row['ProposedLayout'].strip().lower()
+                        suggested_layout=row['ProposedLayout'].strip().lower(),
+                        created_date=db_packaging.created_date,
+                        last_updated_date=datetime.now()
                     ))
                 current_batch += 1
             

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status
-import ollama
-from validations import ModelandText, SupplierProducts, Product, Supplier, PlaceOrder, ConfirmOrder, RecievedPackage, UpdatePackage
+from routers.llm import llm
+from validations import SupplierProducts, Product, Supplier, PlaceOrder, ConfirmOrder, RecievedPackage, UpdatePackage
 import models
 from database import engine, get_db, SessionLocal
 from sqlalchemy.orm import Session
@@ -9,11 +9,9 @@ from typing import Annotated, List
 from script import add_initial_data
 from contextlib import asynccontextmanager
 
-ollama_client = ollama.Client(host="http://localhost:11434")
-
 
 metadata = models.Base.metadata
-metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
+# metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
 product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
 order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
@@ -26,10 +24,10 @@ db_dependency = Annotated[Session, Depends(get_db)]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to run on startup
-    db: Session = SessionLocal()
+    # db: Session = SessionLocal()
     # add_initial_data(db,supplier_id) # Add data from CSV
     #add scorecard and then incidents
-    db.close()
+    # db.close()
     yield
     # Code to run on shutdown (optional)
     print("Application shutdown.")
@@ -37,68 +35,7 @@ async def lifespan(app: FastAPI):
 
 app= FastAPI(lifespan=lifespan)
 
-@app.post("/api/llm/read_email", status_code=status.HTTP_200_OK)
-async def read_email(model_and_text: ModelandText):
-    """
-    """
-    model_name = model_and_text.model_name
-    text = model_and_text.text
-
-    prompt = f"""
-        You are an AI assistant tasked with extracting structured data from emails sent by textile providers. 
-        Read the following email content carefully and extract the relevant information about the textile products mentioned. 
-        Format the extracted information strictly as a JSON object according to the structure provided below.
-
-        Look for the supplier name, garment type, material, size, collection, weight, and weight units.
-        The supplier name is mentioned either at the signature of the email or at the beginning of the email, or in the subject line.
-        The email may contain information about multiple garments, and you should extract details for each garment separately.
-        The garments may include jackets, shorts, sweaters, skirts, shirts, t-shirts, coats, pants, dresses, suits, blouses, and hoodies.
-        The materials may include cotton, polyester, silk, linen, wool, and denim.
-        The sizes may include s, m, l, x, and xxl.
-        The collections may include summer, winter, fall, and spring.
-        The weight may be mentioned in grams or other units, and you should extract the weight value and its unit.
-
-        If there is any null value set the null_values to true.
-        If all the information can be extracted set the null_values to false.
-
-        **Desired JSON Structure:**
-        ```json
-        {{
-            "supplier": "Supplier Name from Email",
-            "data":[{{
-                "garment_type": "extracted garment type",
-                "material": "extracted material",
-                "size": "extracted size or null",
-                "collection": "extracted collection or null",
-                "weight_units": "extracted weight units or 'kg'",
-                "weight": extracted weight (number)
-            }},
-            "null_values": false
-            // ... repeat for each garment mentioned in the email
-            ]
-        }}
-
-        --- START OF EMAIL CONTENT ---
-        {text}
-        --- END OF EMAIL CONTENT ---
-    """
-    if not model_name:
-        raise HTTPException(status_code=400, detail="Model name is required.")
-    
-    if text:
-        messages = [{"role":"system","content": "You are a helpful assistant."}, {"role": "user", "content": prompt}]
-        response = ollama_client.chat(
-            model=model_name, 
-            messages=messages,
-            stream=False,
-            format=SupplierProducts.model_json_schema(),
-            options={
-                "temperature":0.0
-                }
-            )
-        return response
-    else:
-        raise HTTPException(status_code=400, detail="Text is required.")
+app.include_router(llm.router)
 
 @app.post("/api/db/add_products", status_code=status.HTTP_201_CREATED)
 async def add_products(products: List[Product], db: db_dependency):
@@ -246,23 +183,20 @@ async def package_recieved(deliveries: List[RecievedPackage], db:db_dependency):
     reception_id.order_id = generated_order_id
 
 @app.put("/api/db/packaging/update", status_code=status.HTTP_202_ACCEPTED)
-async def update_packaging(packaging:List[UpdatePackage], db:db_dependency)
+async def update_packaging(packaging:List[UpdatePackage], db:db_dependency):
     if not packaging:
         raise HTTPException(status_code=400, detail="No package information provided")
     
     not_found = []
+    changed_products = []
+    changed = False
     for package in packaging:
-        db_package = db.query(models.Packaging).filter(models.Packaging.product_id == package.product_id)
+        db_package = db.query(models.Packaging).filter(models.Packaging.product_id == package.product_id).scalar()
         if db_package is None:
             not_found.append(package.product_id)
             continue
-
-        revision = db_package.revision
-        changed = False
-        changed_products = []
-        changed_from = {k:v for k,v in db_package.items()}
-        changed_to = {}
-        changed_product = {package.product_id:{"from":changed_from}}
+        
+        revision = db_package.revision        
 
         if package.new_method:
             db_package.suggested_folding_method = package.new_method
@@ -270,7 +204,7 @@ async def update_packaging(packaging:List[UpdatePackage], db:db_dependency)
             changed = True
         
         if package.new_layout:
-            db_package.suggested_layout = package.new_method
+            db_package.suggested_layout = package.new_layout
             db_package.last_updated_date = package.last_updated
             changed = True
 
@@ -282,8 +216,10 @@ async def update_packaging(packaging:List[UpdatePackage], db:db_dependency)
         if changed:
             revision += 1
             db_package.revision = revision
+            db.commit()
             return {"message": "Changes applied", "changed products":changed_products, "products not found":not_found}
         
+        db.close()
         return {"message": "No changes", "products not found":not_found}
 
     
