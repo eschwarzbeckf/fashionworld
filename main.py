@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 import ollama
-from validations import ModelandText, SupplierProducts, Product, Supplier, PlaceOrder, ConfirmOrder
+from validations import ModelandText, SupplierProducts, Product, Supplier, PlaceOrder, ConfirmOrder, RecievedPackage, UpdatePackage
 import models
 from database import engine, get_db, SessionLocal
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ ollama_client = ollama.Client(host="http://localhost:11434")
 
 
 metadata = models.Base.metadata
-# metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
+metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
 product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
 order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 app= FastAPI(lifespan=lifespan)
 
-@app.post("/api/ollama/read_email", status_code=status.HTTP_200_OK)
+@app.post("/api/llm/read_email", status_code=status.HTTP_200_OK)
 async def read_email(model_and_text: ModelandText):
     """
     """
@@ -215,6 +215,9 @@ async def place_order(orders: List[PlaceOrder], db: db_dependency):
 
 @app.put("/api/db/orders/confirm", status_code=status.HTTP_202_ACCEPTED)
 async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
+    if orders is None:
+        raise HTTPException(status_code=400, detail="No order information provided.")
+    
     db_orders = []
     not_found = []
     for order in orders:
@@ -232,7 +235,59 @@ async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
 
     db.commit()
     return {"message":"Orders Confirmed", "orders_id":db_orders, "orders_not_found":not_found}
+
+@app.post("api/db/receptions/deliveries", status_code=status.HTTP_200_OK)
+async def package_recieved(deliveries: List[RecievedPackage], db:db_dependency):
+    if deliveries is None:
+        raise HTTPException(status_code=400, detail="No order information provided.")
     
+    next_id_val = db.execute(select(reception_id.next_value())).scalar_one()
+    generated_order_id = f"REC{next_id_val:08d}"
+    reception_id.order_id = generated_order_id
+
+@app.put("/api/db/packaging/update", status_code=status.HTTP_202_ACCEPTED)
+async def update_packaging(packaging:List[UpdatePackage], db:db_dependency)
+    if not packaging:
+        raise HTTPException(status_code=400, detail="No package information provided")
+    
+    not_found = []
+    for package in packaging:
+        db_package = db.query(models.Packaging).filter(models.Packaging.product_id == package.product_id)
+        if db_package is None:
+            not_found.append(package.product_id)
+            continue
+
+        revision = db_package.revision
+        changed = False
+        changed_products = []
+        changed_from = {k:v for k,v in db_package.items()}
+        changed_to = {}
+        changed_product = {package.product_id:{"from":changed_from}}
+
+        if package.new_method:
+            db_package.suggested_folding_method = package.new_method
+            db_package.last_updated_date = package.last_updated
+            changed = True
+        
+        if package.new_layout:
+            db_package.suggested_layout = package.new_method
+            db_package.last_updated_date = package.last_updated
+            changed = True
+
+        if package.new_suggested_quantity:
+            db_package.suggested_quantity = package.new_suggested_quantity
+            db_package.last_updated_date = package.last_updated
+            changed = True
+
+        if changed:
+            revision += 1
+            db_package.revision = revision
+            return {"message": "Changes applied", "changed products":changed_products, "products not found":not_found}
+        
+        return {"message": "No changes", "products not found":not_found}
+
+    
+
 
 @app.get("/")
 def read_root():

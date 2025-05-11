@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
 from datetime import datetime
+from random import choices
 
 class ModelandText(BaseModel):
     model_name: str = Field(default="gemma:2b", description="The name of the model to use for processing the email content.")
@@ -38,6 +39,24 @@ class ConfirmOrder(BaseModel):
     order_confirmed_date:Optional[datetime] = Field(description="Date when order is confirmed", default=datetime.now())
     order_status:Optional[str] = Field(description="Status of the order", default="confirmed")
     last_updated:Optional[datetime] = Field(description="Last time record was updated", default=datetime.now())
+
+class RecievedPackage(BaseModel):
+    reception_id: Optional[str] = Field(description="Id of the reception")
+    order_id: str = Field(description="Id of the order")
+    product_id: str = Field(description="Id of the product that its being scanned")
+    reception_date: datetime = Field(description="date of the reception", default=datetime.now())
+    quantity_recieved: int = Field(description="total boxes recieved")
+    audit_threshold: float = Field(description="threshold risk to audit package", default=0.5)
+    on_time: bool = Field(description="If package was delivered on time", default=choices([True, False], weights=[0.7,0.3], k=1)[0])
+
+class UpdatePackage(BaseModel):
+    product_id: str = Field(description="Id of the product to update")
+    new_method: Optional[Literal['method1','method2','method3']] = Field(description="New Method")
+    new_layout: Optional[Literal['layouta','layoutb','layoutc','layoutd','layoute','layoutf','layoutg','layouth']] = Field(description="new Layout")
+    new_suggested_quantity: Optional[int] = Field(description="New packaging quantity per box")
+    last_updated: datetime = Field(description="Updated time", default=datetime.now())
+
+
     
 
 
