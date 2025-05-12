@@ -1,10 +1,14 @@
-from fastapi import APIRouter, status, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, status, HTTPException, Depends
+from sqlalchemy import select, Sequence
 from sqlalchemy.orm import Session
+from database import metadata, get_db
 from validations import Product
-from typing import List
+from typing import List, Annotated
 import models
-from main import product_id
+
+product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
+
+db_dependency = Annotated[Session, Depends(get_db)]
 
 router = APIRouter(
     prefix="/api/db/products"
@@ -12,7 +16,7 @@ router = APIRouter(
 
 
 @router.post("/add_products", status_code=status.HTTP_201_CREATED)
-async def add_products(products: List[Product], db: Session):
+async def add_products(products: List[Product], db: db_dependency):
     if not products:
         raise HTTPException(status_code=400, detail="No products provided.")
     

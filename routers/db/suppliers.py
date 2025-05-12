@@ -1,18 +1,23 @@
-from fastapi import APIRouter, status, HTTPException
+from fastapi import APIRouter, status, HTTPException, Depends
 from typing import List
 from validations import Supplier, SupplierProducts
 from sqlalchemy.orm import Session
-from sqlalchemy import select
-from main import supplier_id
+from sqlalchemy import select,Sequence
+from database import metadata, get_db
 import models
-from db.products import add_products
+from routers.db.products import add_products
+from typing import Annotated
+
+supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
+
+db_dependency = Annotated[Session, Depends(get_db)]
 
 router = APIRouter(
     prefix="/api/db/suppliers"
     )
 
 @router.post("/add_suppliers", status_code=status.HTTP_201_CREATED)
-async def add_suppliers(suppliers: List[Supplier], db: Session):
+async def add_suppliers(suppliers: List[Supplier], db: db_dependency):
     if not suppliers:
         raise HTTPException(status_code=400, detail="No suppliers provided.")
     suppliers_ids = []
@@ -40,7 +45,7 @@ async def add_suppliers(suppliers: List[Supplier], db: Session):
     return {"message": "Suppliers added successfully", "suppliers_ids": suppliers_ids, "suppliers_added": suppliers, "suppliers_already_exists": suppliers_already_exists}
 
 @router.post("/assign_supplier_product", status_code=status.HTTP_201_CREATED)
-async def add_supplier_product(info:List[SupplierProducts], db: Session):
+async def add_supplier_product(info:List[SupplierProducts], db: db_dependency):
     if not info:
         raise HTTPException(status_code=400, detail="No supplier product information provided.")
 

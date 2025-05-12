@@ -1,15 +1,19 @@
-from fastapi import APIRouter, status, HTTPException
+from fastapi import APIRouter, status, HTTPException, Depends
 import models
 from validations import UpdatePackage
 from typing import List
+from database import get_db
 from sqlalchemy.orm import Session
+from typing import Annotated
 
 router = APIRouter(
     prefix="/api/db/packaging"
 )
 
+db_dependency = Annotated[Session, Depends(get_db)]
+
 @router.put("/update", status_code=status.HTTP_202_ACCEPTED)
-async def update_packaging(packaging:List[UpdatePackage], db:Session):
+async def update_packaging(packaging:List[UpdatePackage], db:db_dependency):
     if not packaging:
         raise HTTPException(status_code=400, detail="No package information provided")
     

@@ -1,8 +1,10 @@
 from database import Base
-from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, UniqueConstraint, ForeignKeyConstraint
+from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, MetaData
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 from typing import List
+
+
 
 class Products(Base):
     __tablename__ = 'products'

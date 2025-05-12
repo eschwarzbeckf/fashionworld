@@ -1,10 +1,10 @@
-from fastapi import APIRouter, status, HTTPException
+from fastapi import APIRouter, status, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select, Sequence
+from database import metadata,get_db
 from validations import PlaceOrder, ConfirmOrder
 import models
-from typing import List
-from main import metadata
+from typing import List, Annotated
 
 order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
 
@@ -12,9 +12,10 @@ router = APIRouter(
     prefix="/api/db/orders"
 )
 
+db_dependency = Annotated[Session, Depends(get_db)]
 
 @router.post("/place", status_code=status.HTTP_201_CREATED)
-async def place_order(orders: List[PlaceOrder], db: Session):
+async def place_order(orders: List[PlaceOrder], db:db_dependency):
     if not orders:
         raise HTTPException(status_code=400, detail="No order information provided.")
     
@@ -38,8 +39,8 @@ async def place_order(orders: List[PlaceOrder], db: Session):
     db.commit()
     return {"message": "Order placed successfully", "order_id": order_ids, "order": orders}
 
-@router.put("/api/db/orders/confirm", status_code=status.HTTP_202_ACCEPTED)
-async def confirm_order(orders: List[ConfirmOrder], db:Session):
+@router.put("/confirm", status_code=status.HTTP_202_ACCEPTED)
+async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
     if orders is None:
         raise HTTPException(status_code=400, detail="No order information provided.")
     
