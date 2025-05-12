@@ -1,10 +1,12 @@
 from fastapi import APIRouter, status, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, Sequence
 from validations import PlaceOrder, ConfirmOrder
 import models
-from main import order_id
 from typing import List
+from main import metadata
+
+order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
 
 router = APIRouter(
     prefix="/api/db/orders"

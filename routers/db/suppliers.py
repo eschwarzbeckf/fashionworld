@@ -11,8 +11,6 @@ router = APIRouter(
     prefix="/api/db/suppliers"
     )
 
-
-
 @router.post("/add_suppliers", status_code=status.HTTP_201_CREATED)
 async def add_suppliers(suppliers: List[Supplier], db: Session):
     if not suppliers:
