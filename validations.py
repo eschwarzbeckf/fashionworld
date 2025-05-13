@@ -55,9 +55,10 @@ class UpdatePackage(BaseModel):
     last_updated: datetime = Field(description="Updated time", default=datetime.now())
 
 class ItemToAudit(BaseModel):
-    package_uuid: str = Field(description="package UUID to audit")
+    reception_id: str = Field(description="Reception ID")
+    package_uuid: str = Field(description="package UUID to audit",min_length=36,max_length=36)
     product_id: str = Field(description="Product ID")
-    package_quality: str = Field(description="Quality of Package")
+    package_quality: Literal['good','bad'] = Field(description="Quality of Package")
 
 
     
