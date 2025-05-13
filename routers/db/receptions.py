@@ -25,6 +25,7 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:db_dependency):
     argument -- description
     Return: total_to_be_recieved
     """
+    # Select the orders that are relevant to the order and product, order them based on the boxes ordered
     stmt = select(
             models.Orders.order_id,
             models.Orders.product_id,
@@ -39,6 +40,8 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:db_dependency):
             )
     order_db = db.execute(stmt).all()
     for order in order_db:
+        # For each order, check if the total recieved amount is less than the order,
+        # If it is, then the order is considered filled. so we need to update the status, and the filled date
         if order[3] <= total_to_be_recieved:
             update_statement = update(
                     models.Orders
@@ -52,6 +55,7 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:db_dependency):
                     last_updated=datetime.now()
                 )
             db.execute(update_statement)
+            # We need to remove the units we assigned to the order
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
