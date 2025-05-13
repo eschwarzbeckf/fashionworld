@@ -5,10 +5,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select,Sequence
 from database import metadata, get_db
 import models
+from models import supplier_id
 from routers.db.products import add_products
 from typing import Annotated
-
-supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
 
 db_dependency = Annotated[Session, Depends(get_db)]
 

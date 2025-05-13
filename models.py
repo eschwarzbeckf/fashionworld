@@ -1,10 +1,14 @@
-from database import Base
-from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, MetaData
+from database import Base,metadata
+from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, Sequence
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 from typing import List
 
-
+supplier_id = Sequence('supplier_id_seq', start=1, increment=1, metadata=metadata)
+reception_id = Sequence('reception_id_seq', start=1, increment=1, metadata=metadata)
+order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
+audit_id = Sequence('audit_id_seq', start=1, increment=1, metadata=metadata)
+product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 
 class Products(Base):
     __tablename__ = 'products'
@@ -87,29 +91,37 @@ class Orders(Base):
 
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_orderitems")
     order_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_orders")
+    
 
     __table_args__ = (
         PrimaryKeyConstraint('order_id','item_no', name='pk_order_item'),
     )
 
+
 class Receptions(Base):
     __tablename__ = 'receptions'
-    reception_id:Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True, primary_key=True)
-    order_id:Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
+    reception_id:Mapped[str] = mapped_column(String(12), nullable=False, index=True)
+    package_uuid:Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    order_id:Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
     reception_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    quantity_received:Mapped[int] = mapped_column(Integer, nullable=False)
     to_audit:Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     on_time: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    package_quality: Mapped[str] = mapped_column(String(5), nullable=False)
 
     parent_orders: Mapped["Orders"] = relationship(back_populates="order_id_receptions")
+
+    __table_args__= (
+        PrimaryKeyConstraint('reception_id','package_uuid', name='pk_receptions'),
+    )
 
 
 class Audits(Base):
     __tablename__ = 'audits'
-    inspection_id:Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True, primary_key=True)
+    audit_id:Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True, primary_key=True)
     reception_id:Mapped[str] = mapped_column(String(12), ForeignKey('receptions.reception_id', ondelete="CASCADE"), nullable=False, index=True)
     product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    package_id:Mapped[str] = mapped_column(String(36), ForeignKey('receptions.package_uuid',ondelete="CASCADE"), nullable=False, index=True)
     inspection_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     real_quantity:Mapped[int] = mapped_column(Integer, nullable=False)
     real_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)

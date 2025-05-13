@@ -5,8 +5,8 @@ from database import metadata, get_db
 from validations import Product
 from typing import List, Annotated
 import models
+from models import product_id
 
-product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
@@ -23,7 +23,6 @@ async def add_products(products: List[Product], db: db_dependency):
     products_ids = []
     db_products = []
     for product in products:
-        print(product)
         next_id_val = db.execute(select(product_id.next_value())).scalar_one()
         generated_product_id = f"PRD{next_id_val:05d}"
         product.product_id = generated_product_id

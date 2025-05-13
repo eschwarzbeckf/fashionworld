@@ -5,8 +5,7 @@ from database import metadata,get_db
 from validations import PlaceOrder, ConfirmOrder
 import models
 from typing import List, Annotated
-
-order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
+from models import order_id
 
 router = APIRouter(
     prefix="/api/db/orders"

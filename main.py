@@ -3,18 +3,21 @@ from routers.llm import llm
 from routers.db import orders, products, packaging, suppliers, receptions, audits
 from database import engine, metadata
 from script import add_initial_data
+from sqlalchemy.orm import Session
+from database import SessionLocal
 from contextlib import asynccontextmanager
+from models import supplier_id
+import uvicorn
 
-# metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
+metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
 metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to run on startup
-    # db: Session = SessionLocal()
-    # add_initial_data(db,supplier_id) # Add data from CSV
-    #add scorecard and then incidents
-    # db.close()
+    db: Session = SessionLocal()
+    add_initial_data(db,supplier_id) # Add data from CSV
+    db.close()
     yield
     # Code to run on shutdown (optional)
     print("Application shutdown.")
@@ -32,3 +35,6 @@ app.include_router(receptions.router)
 @app.get("/")
 def read_root():
     return {"message": "Your app is running!"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
