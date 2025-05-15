@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     print("Application shutdown.")
 
 
-app= FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(llm.router)
 app.include_router(orders.router)

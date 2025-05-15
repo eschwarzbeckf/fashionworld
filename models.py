@@ -40,6 +40,7 @@ class Suppliers(Base):
     
     supplier_id_supplierprod: Mapped[List["SuppliersProducts"]] = relationship(back_populates="parent_suppliers")
     supplier_id_scorecard: Mapped[List["Scorecard"]] = relationship(back_populates="parent_suppliers")
+    supplier_id_suppliererrors: Mapped["SupplierRates"] = relationship(back_populates="parent_suppliers")
 
 class SuppliersProducts(Base):
     __tablename__ = 'suppliers_products'
@@ -182,5 +183,16 @@ class Incidents(Base):
     cost_impact:Mapped[float] = mapped_column(Float, nullable=False)
 
     parent_products: Mapped["Products"] = relationship(back_populates='product_id_incidents')
-    
 
+class SupplierRates(Base):
+    __tablename__ = 'suppliers_error'
+    supplier_id: Mapped[str] = mapped_column(String(8),ForeignKey('suppliers.supplier_id',ondelete='CASCADE'), unique=True, nullable=False, index=True, primary_key=True)
+    error_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
+    order_mean: Mapped[Float] = mapped_column(Float(3),nullable=False)
+    order_std: Mapped[Float] = mapped_column(Float(3), nullable=False)
+    order_max: Mapped[Float] = mapped_column(Float(3),nullable=False)
+    order_min: Mapped[Float] = mapped_column(Float(3),nullable=False)
+    on_time_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
+    packaging_quality_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
+
+    parent_suppliers:Mapped["Suppliers"] = relationship(back_populates="supplier_id_suppliererrors")

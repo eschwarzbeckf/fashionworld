@@ -60,6 +60,10 @@ class ItemToAudit(BaseModel):
     product_id: str = Field(description="Product ID")
     package_quality: Literal['good','bad'] = Field(description="Quality of Package")
 
+class OrderFakeData(BaseModel):
+    supplier: str = Field(description="Fake Supplier Name")
+    product_id: str = Field(description="Product_id")
+
 
     
 

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, status, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import select, Sequence
+from sqlalchemy import select
 from database import metadata,get_db
 from validations import PlaceOrder, ConfirmOrder
 import models
 from typing import List, Annotated
 from models import order_id
+from ..services.services import create_fake_order
+
 
 router = APIRouter(
     prefix="/api/db/orders"
@@ -24,6 +26,7 @@ async def place_order(orders: List[PlaceOrder], db:db_dependency):
         next_id_val = db.execute(select(order_id.next_value())).scalar_one()
         generated_order_id = f"ORD{next_id_val:05d}"
         order.order_id = generated_order_id
+        order_ids.append(generated_order_id)
         for i,item in enumerate(order.items):
             db_orders.append(models.Orders(
                 order_id=order.order_id,
@@ -36,7 +39,7 @@ async def place_order(orders: List[PlaceOrder], db:db_dependency):
 
     db.add_all(db_orders)
     db.commit()
-    return {"message": "Order placed successfully", "order_id": order_ids, "order": orders}
+    return {"message": "Order placed successfully", "order_ids": order_ids}
 
 @router.put("/confirm", status_code=status.HTTP_202_ACCEPTED)
 async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
@@ -59,3 +62,10 @@ async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
 
     db.commit()
     return {"message":"Orders Confirmed", "orders_id":db_orders, "orders_not_found":not_found}
+
+@router.get("/fake",status_code=status.HTTP_200_OK)
+async def fake_order(db:db_dependency):
+    # creates fake data
+    data = create_fake_order(db)
+
+    return data
