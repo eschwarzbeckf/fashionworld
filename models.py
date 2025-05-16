@@ -85,7 +85,7 @@ class Orders(Base):
     product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     boxes_ordered:Mapped[int] = mapped_column(Integer, nullable=False)
     order_placed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    supplier_order_id:Mapped[str] = mapped_column(String(20), nullable=True, index=True)
+    supplier_order_id:Mapped[str] = mapped_column(String(50), nullable=True, index=True)
     order_confirmed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # When supplier confirmed order
     order_due_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # TAT of order
     order_filled_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True) # when order was completed (last material recieved)

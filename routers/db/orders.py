@@ -61,7 +61,8 @@ async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
             not_found.append(order.order_id)
 
     db.commit()
-    return {"message":"Orders Confirmed", "orders_id":db_orders, "orders_not_found":not_found}
+    db_orders = set(db_orders)
+    return {"message":"Orders Confirmed", "orders_ids":list(db_orders), "orders_not_found":not_found}
 
 @router.get("/fake",status_code=status.HTTP_200_OK)
 async def fake_order(db:db_dependency):

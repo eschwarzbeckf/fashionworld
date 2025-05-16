@@ -1,15 +1,17 @@
 from fastapi import APIRouter, status, HTTPException, Depends
-from validations import RecievedDelivery
+from validations import RecievedDelivery, ItemToAudit
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, label, update
 from database import get_db
 from typing import List, Annotated
 import models
-from models import reception_id, audit_id
+from models import reception_id
 from datetime import datetime
 from random import choices
 from uuid import uuid4
 from datetime import datetime
+from ..services.services import create_fake_delivery
+from .audits import create_audit
 
 
 router = APIRouter(
@@ -61,7 +63,7 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:db_dependency):
             break
 
 @router.post("/deliveries", status_code=status.HTTP_201_CREATED)
-async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency):
+async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,audit:float = 0.10):
     if deliveries is None:
         raise HTTPException(status_code=400, detail="No order information provided.")
     
@@ -74,8 +76,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
     next_id_val = db.execute(select(reception_id.next_value())).scalar_one()
     generated_recieved_id = f"REC{next_id_val:08d}"
     for delivery in deliveries:
-        # audit threshold
-        audit = delivery.audit_threshold
         # query which orders are not filled and are confirmed
         order_db = db.execute(
             select(
@@ -117,8 +117,41 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
 
         if pending_to_recieve <= 0:
             # If thereare nothing pending to recieve, then
-            packages_to_return.append(delivery)
-            continue
+            for package in range(int(order_quantity)):
+                uuid = str(uuid4())
+                to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
+                package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
+                delivery_db.append(models.Receptions(
+                    reception_id = generated_recieved_id,
+                    package_uuid=uuid,
+                    product_id=delivery.product_id,
+                    order_id=delivery.order_id,
+                    reception_date=datetime.now(),
+                    to_audit=to_audit,
+                    on_time=delivery.on_time,
+                    package_quality=package_quality
+                    )
+                )
+                if to_audit:
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
+                elif package_quality == 'bad':
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
+            
+            # Update the recieved quantity
+            total_to_be_recieved = order_quantity
+            # Check orders to be filled
+            update_orders(delivery,total_to_be_recieved,db)
+            
         elif order_quantity > total_to_be_recieved:
             # If the order quantity is greater than the total to be recieved, then we will accept the whole delivery
             for package in range(delivery.quantity_recieved):
@@ -140,17 +173,34 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
         elif order_quantity <= total_to_be_recieved:
             # If the order quantity is less or equals to the total to be recieved, then we will only take what is pending to recieve
             for package in range(int(pending_to_recieve)):
+                uuid = str(uuid4())
+                to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
+                package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
                 delivery_db.append(models.Receptions(
                     reception_id = generated_recieved_id,
-                    package_uuid=str(uuid4()),
+                    package_uuid=uuid,
                     product_id=delivery.product_id,
                     order_id=delivery.order_id,
                     reception_date=datetime.now(),
-                    to_audit=choices([False, True], weights=[1-audit,audit], k=1)[0],
+                    to_audit=to_audit,
                     on_time=delivery.on_time,
-                    package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
+                    package_quality=package_quality
                     )
                 )
+                if to_audit:
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
+                elif package_quality == 'bad':
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
             
             #Return the packages that are left over
             delivery.quantity_recieved -= pending_to_recieve
@@ -164,14 +214,17 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
     # Add the deliveries to the database
     db.add_all(delivery_db)
     if len(audits_db) > 0:
-        db.add_all(audits_db)
+        audit_message = await create_audit(audits_db,db)
+    else:
+        audit_message={"audits":"No Audits Created"}
 
     if len(order_updates) > 0:
         db.add_all(order_updates)
     db.commit()
-    return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return}
+    return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return,"packages_for_audit":audit_message["audits"]}
 
-
-
-
-
+@router.get("/deliveries_fake", status_code=status.HTTP_201_CREATED)
+async def fake_package_recieved(db:db_dependency):    
+    deliveries = await create_fake_delivery(db)
+    message = await package_recieved(deliveries,db)
+    return message

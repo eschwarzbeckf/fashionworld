@@ -45,7 +45,6 @@ class RecievedDelivery(BaseModel):
     product_id: str = Field(description="Id of the product that its being scanned")
     reception_date: datetime = Field(description="date of the reception", default=datetime.now())
     quantity_recieved: int = Field(description="total boxes recieved", gt=0)
-    audit_threshold: float = Field(description="threshold risk to audit package", default=0.1)
     on_time: Optional[bool] = Field(description="If delivery was recieved on the accorded lead time", default=choices([True, False], weights=[0.8,0.2], k=1)[0])
 class UpdatePackage(BaseModel):
     product_id: str = Field(description="Id of the product to update")

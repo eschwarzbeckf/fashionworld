@@ -1,11 +1,12 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 import pandas as pd
 import numpy as np
 import scipy.stats as ss
 import random
 import models
+from validations import RecievedDelivery
 
 density = pd.read_csv(r'C:\Users\esteb\Projects\MBD\Capgemin\app\data\csv\density.csv',encoding='utf-8')
 density_suppliers = density.groupby(['DateOfReport','SupplierName']).count()
@@ -13,7 +14,7 @@ density_products = density.groupby(['DateOfReport','SupplierName','ProductRefere
 
 
 
-def create_fake_order(db:Session):
+def create_fake_order(db:Session) -> dict:
     # Data to return
     data = []
     
@@ -62,14 +63,49 @@ def create_fake_order(db:Session):
         items = []
         while curr_items < total_products:
             product = random.choice(products)
-            quantity = random.choices(quantities,probabilities,k=1)[0]
+            quantity = float(random.choices(quantities,probabilities,k=1)[0])
             items.append({
                 "product_id":product,
-                "boxes_ordered":float(quantity)
+                "boxes_ordered":quantity
                 })
-            curr_items += float(quantity)
+            curr_items += quantity
         
         data.append({"items":items})
 
     return data
+
+async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
+    orders_db = db.execute(
+        select(
+            models.Orders.order_id,
+            models.Orders.product_id,
+            func.sum(models.Orders.boxes_ordered).label('total_boxes')
+        ).where(
+            models.Orders.order_status == 'confirmed'
+        ).group_by(
+            models.Orders.order_id,
+            models.Orders.product_id
+        )
+    ).all()
+
+    order_products = [RecievedDelivery(order_id=order_id,product_id=product_id,quantity_recieved=total_boxes) for order_id,product_id,total_boxes in orders_db]
+    capacity = random.choices([1000,500,200,10],weights=[0.35,0.35,0.2,0.1],k=1)[0]
+    curr_load = 0
+    deliveries = []
     
+    while curr_load < capacity:
+        order = random.choice(order_products)
+        remaining = capacity - curr_load
+        if order.quantity_recieved >= remaining:
+            order.quantity_recieved = remaining
+            deliveries.append(order)
+            curr_load += remaining
+        else:
+            deliveries.append(order)
+            curr_load += order.quantity_recieved
+            order_products.remove(order)
+        
+    
+    return deliveries
+
+
