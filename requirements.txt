@@ -4,3 +4,4 @@ ollama
 sqlalchemy
 pymysql
 pandas
+minio

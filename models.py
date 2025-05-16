@@ -12,7 +12,7 @@ product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 
 class Products(Base):
     __tablename__ = 'products'
-    product_id: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True, primary_key=True)
+    product_id: Mapped[str] = mapped_column(String(9), unique=True, nullable=False, index=True, primary_key=True)
     garment_type:Mapped[str] = mapped_column(String(50), nullable=False)
     material: Mapped[str] = mapped_column(String(50), nullable=False)
     size: Mapped[str] = mapped_column(String(5), nullable=True)
@@ -29,6 +29,7 @@ class Products(Base):
     product_id_incidents: Mapped[List["Incidents"]] = relationship(back_populates="parent_products")
     product_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_products")
     product_id_audits: Mapped[List["Audits"]] = relationship(back_populates="parent_products")
+    products_id_productsdefects: Mapped[List["ProductsDefects"]] = relationship(back_populates="parent_products")
     
 
 class Suppliers(Base):
@@ -40,12 +41,12 @@ class Suppliers(Base):
     
     supplier_id_supplierprod: Mapped[List["SuppliersProducts"]] = relationship(back_populates="parent_suppliers")
     supplier_id_scorecard: Mapped[List["Scorecard"]] = relationship(back_populates="parent_suppliers")
-    supplier_id_suppliererrors: Mapped["SupplierRates"] = relationship(back_populates="parent_suppliers")
+    supplier_id_suppliererrors: Mapped["SupplierError"] = relationship(back_populates="parent_suppliers")
 
 class SuppliersProducts(Base):
     __tablename__ = 'suppliers_products'
     supplier_id:Mapped[str] = mapped_column(String(8), ForeignKey('suppliers.supplier_id', ondelete="CASCADE"), index=True, nullable=True)
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE") , index=True, nullable=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE") , index=True, nullable=True)
     created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False,default=func.now())
     
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_supplierprod")
@@ -57,7 +58,7 @@ class SuppliersProducts(Base):
 
 class Packaging(Base):
     __tablename__ = 'packaging'
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     revision:Mapped[int] = mapped_column(Integer, nullable=False)
     suggested_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)
     suggested_quantity:Mapped[float] = mapped_column(Float, nullable=False)
@@ -73,7 +74,7 @@ class Packaging(Base):
 
 class Density(Base):
     __tablename__="density"
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"),primary_key=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"),primary_key=True)
     date_of_report:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
 
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_density")
@@ -82,7 +83,7 @@ class Orders(Base):
     __tablename__ = 'orders'
     order_id:Mapped[str] = mapped_column(String(8), nullable=False, index=True)
     item_no:Mapped[int] = mapped_column(Integer, nullable=False)
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     boxes_ordered:Mapped[int] = mapped_column(Integer, nullable=False)
     order_placed_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     supplier_order_id:Mapped[str] = mapped_column(String(50), nullable=True, index=True)
@@ -104,27 +105,12 @@ class Audits(Base):
     __tablename__ = 'audits'
     audit_id:Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True, primary_key=True)
     reception_id:Mapped[str] = mapped_column(String(12), ForeignKey('receptions.reception_id', ondelete="CASCADE"), nullable=False, index=True)
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
-    package_revision:Mapped[int] = mapped_column(Integer, nullable=False)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     package_uuid:Mapped[str] = mapped_column(String(36), ForeignKey('receptions.package_uuid',ondelete="CASCADE"), nullable=False, index=True)
     created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    suggested_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)
-    suggested_quantity:Mapped[float] = mapped_column(Float, nullable=False)
-    suggested_layout:Mapped[str] = mapped_column(String(25), nullable=False)
-    garment_type:Mapped[str] = mapped_column(String(50), nullable=False)
-    material: Mapped[str] = mapped_column(String(50), nullable=False)
-    size: Mapped[str] = mapped_column(String(5), nullable=False)
-    collection: Mapped[str] = mapped_column(String(25), nullable=False)
-    weight: Mapped[float] = mapped_column(Float(3), nullable=False)
-    weight_units: Mapped[str] = mapped_column(String(5), nullable=False, default="kg")
     packaging_quality:Mapped[str] = mapped_column(String(5), nullable=False)
-    real_quantity:Mapped[int] = mapped_column(Integer, nullable=True)
-    real_folding_method:Mapped[str] = mapped_column(String(25), nullable=True)
-    real_layout:Mapped[str] = mapped_column(String(25), nullable=True)
-    real_material:Mapped[str] = mapped_column(String(50), nullable=True)
-    real_weight:Mapped[float] = mapped_column(Float(3), nullable=True)
-    real_size:Mapped[str] = mapped_column(String(5), nullable=True)
-    real_collection:Mapped[str] = mapped_column(String(25), nullable=True)
+    issue_description:Mapped[str] = mapped_column(String(50), nullable=False)
+    cost_impact:Mapped[float] = mapped_column(Float(3), nullable=True)
     audit_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     parent_products: Mapped["Products"] = relationship("Products",
@@ -137,7 +123,7 @@ class Receptions(Base):
     __tablename__ = 'receptions'
     reception_id:Mapped[str] = mapped_column(String(12), nullable=False, index=True)
     package_uuid:Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     order_id:Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
     reception_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     to_audit:Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -177,22 +163,25 @@ class Scorecard(Base):
 
 class Incidents(Base):
     __tablename__ = 'incidents'
-    product_id:Mapped[str] = mapped_column(String(8), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True, primary_key=True)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True, primary_key=True)
     date_of_incident:Mapped[DateTime] = mapped_column(DateTime,nullable=False)
     issue_description:Mapped[str] = mapped_column(String(50),nullable=False)
     cost_impact:Mapped[float] = mapped_column(Float, nullable=False)
 
     parent_products: Mapped["Products"] = relationship(back_populates='product_id_incidents')
 
-class SupplierRates(Base):
+class SupplierError(Base):
     __tablename__ = 'suppliers_error'
     supplier_id: Mapped[str] = mapped_column(String(8),ForeignKey('suppliers.supplier_id',ondelete='CASCADE'), unique=True, nullable=False, index=True, primary_key=True)
     error_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
-    order_mean: Mapped[Float] = mapped_column(Float(3),nullable=False)
-    order_std: Mapped[Float] = mapped_column(Float(3), nullable=False)
-    order_max: Mapped[Float] = mapped_column(Float(3),nullable=False)
-    order_min: Mapped[Float] = mapped_column(Float(3),nullable=False)
-    on_time_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
     packaging_quality_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
 
     parent_suppliers:Mapped["Suppliers"] = relationship(back_populates="supplier_id_suppliererrors")
+
+class ProductsDefects(Base):
+    __tablename__ ="products_defects"
+    uuid: Mapped[str] = mapped_column(String(36), primary_key=True,unique=True,nullable=False, index=True)
+    product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    issue: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    parent_products:Mapped["Products"] = relationship(back_populates="products_id_productsdefects")

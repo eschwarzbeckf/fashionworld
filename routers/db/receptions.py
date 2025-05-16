@@ -12,7 +12,11 @@ from uuid import uuid4
 from datetime import datetime
 from ..services.services import create_fake_delivery
 from .audits import create_audit
+import random
+import pandas as pd
+import numpy as np
 
+incidents = pd.read_csv(r'C:\Users\esteb\Projects\MBD\Capgemin\app\data\csv\incidents.csv')
 
 router = APIRouter(
     prefix="/api/db/receptions"
@@ -61,6 +65,45 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:db_dependency):
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
+
+def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
+    uuid = str(uuid4())
+    supplier_id, supplier_name = db.execute(
+        select(
+            models.SuppliersProducts.supplier_id,
+            models.Suppliers.name
+        ).join(
+            models.Suppliers, models.Suppliers.supplier_id == models.SuppliersProducts.supplier_id
+        ).where(
+            models.SuppliersProducts.product_id == delivery.product_id
+        )
+    ).first()
+    error, = db.execute(
+        select(
+            models.SupplierError.error_rate
+        ).where(
+            models.SupplierError.supplier_id == supplier_id
+        )
+    ).first()
+    proportions = incidents[(incidents['SupplierName']==supplier_name) & (incidents['IssueDescription'] != 'Packaging Damage')]['IssueDescription'].value_counts(normalize=True)
+    issue_categories = np.array(proportions.index)
+    probabilities = np.array(proportions.values)
+    issue = random.choices([True,False],[error,1-error],k=1)[0]
+    if issue:
+        add_issue = random.choices(issue_categories,probabilities,k=1)[0]
+    elif delivery.package_quality == 'bad':
+        add_issue = 'packaging damage'
+    else:
+        add_issue = 'none'
+    
+    product_issue = models.ProductsDefects(
+        uuid = uuid,
+        product_id=delivery.product_id,
+        issue=add_issue
+    )
+    db.add(product_issue)
+    db.commit()
+    return uuid
 
 @router.post("/deliveries", status_code=status.HTTP_201_CREATED)
 async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,audit:float = 0.10):
@@ -114,13 +157,12 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
         # What we have would be if we accept all the delivery the amount of packages
         total_to_be_recieved = recieved_quantity + delivery.quantity_recieved # What would be recieved if accept ALL the delivery + what we have already accepted
         pending_to_recieve = order_quantity - recieved_quantity # What is pending to recieve in the current order
-
+        # Assign issue if there is any to product
         if pending_to_recieve <= 0:
             # If thereare nothing pending to recieve, then
             for package in range(int(order_quantity)):
-                uuid = str(uuid4())
+                uuid = assign_issue(delivery,db)
                 to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
-                package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
                 delivery_db.append(models.Receptions(
                     reception_id = generated_recieved_id,
                     package_uuid=uuid,
@@ -129,7 +171,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                     reception_date=datetime.now(),
                     to_audit=to_audit,
                     on_time=delivery.on_time,
-                    package_quality=package_quality
+                    package_quality=delivery.package_quality
                     )
                 )
                 if to_audit:
@@ -139,7 +181,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                         product_id=delivery.product_id,
                         package_quality=package_quality
                     ))
-                elif package_quality == 'bad':
+                elif delivery.package_quality == 'bad':
                     audits_db.append(ItemToAudit(
                         reception_id=generated_recieved_id,
                         package_uuid=uuid,
@@ -155,17 +197,33 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
         elif order_quantity > total_to_be_recieved:
             # If the order quantity is greater than the total to be recieved, then we will accept the whole delivery
             for package in range(delivery.quantity_recieved):
+                uuid = assign_issue(delivery,db)
                 delivery_db.append(models.Receptions(
                     reception_id = generated_recieved_id,
-                    package_uuid=str(uuid4()),
+                    package_uuid=uuid,
                     product_id=delivery.product_id,
                     order_id=delivery.order_id,
                     reception_date=datetime.now(),
                     to_audit=choices([False, True], weights=[1-audit,audit], k=1)[0],
                     on_time=delivery.on_time,
-                    package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
+                    package_quality=delivery.package_quality
                     )
                 )
+                to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
+                if to_audit:
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
+                elif delivery.package_quality == 'bad':
+                    audits_db.append(ItemToAudit(
+                        reception_id=generated_recieved_id,
+                        package_uuid=uuid,
+                        product_id=delivery.product_id,
+                        package_quality=package_quality
+                    ))
             # After accepting the delivery, we will update the orders and see if we can 'fill' the orders
             update_orders(delivery,total_to_be_recieved,db)
             continue
@@ -173,7 +231,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
         elif order_quantity <= total_to_be_recieved:
             # If the order quantity is less or equals to the total to be recieved, then we will only take what is pending to recieve
             for package in range(int(pending_to_recieve)):
-                uuid = str(uuid4())
+                uuid = assign_issue(delivery,db)
                 to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
                 package_quality=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0]
                 delivery_db.append(models.Receptions(
@@ -228,3 +286,4 @@ async def fake_package_recieved(db:db_dependency):
     deliveries = await create_fake_delivery(db)
     message = await package_recieved(deliveries,db)
     return message
+
