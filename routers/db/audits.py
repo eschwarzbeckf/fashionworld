@@ -8,10 +8,6 @@ from sqlalchemy import select
 import models
 from datetime import datetime
 import pickle
-from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.linear_model import LinearRegression
-from sklearn.compose import make_column_selector, make_column_transformer, ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
 
 with open(r'C:\Users\esteb\Projects\MBD\Capgemin\app\routers\machinelearning\lr.pkl','rb') as f:
     model = pickle.load(f)
@@ -39,6 +35,7 @@ async def create_audit(items: List[ItemToAudit], db:db_dependency):
         
         next_id_val = db.execute(select(audit_id.next_value())).scalar_one()
         generated_audit_id = f"AUD{next_id_val:08d}"
+ 
         audit_db.append(
             models.Audits(
                 audit_id=generated_audit_id,

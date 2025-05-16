@@ -9,15 +9,15 @@ from contextlib import asynccontextmanager
 from models import supplier_id
 import uvicorn
 
-# metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
+metadata.drop_all(bind=engine) #Drops all tables in the database, if they exists (comment this if want to keep data)
 metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to run on startup
-    # db: Session = SessionLocal()
-    # add_initial_data(db,supplier_id) # Add data from CSV
-    # db.close()
+    db: Session = SessionLocal()
+    add_initial_data(db,supplier_id) # Add data from CSV
+    db.close()
     yield
     # Code to run on shutdown (optional)
     print("Application shutdown.")
