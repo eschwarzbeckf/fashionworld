@@ -100,10 +100,13 @@ async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
             order.quantity_recieved = remaining
             deliveries.append(order)
             curr_load += remaining
+            order_products.remove(order)
         else:
             deliveries.append(order)
             curr_load += order.quantity_recieved
             order_products.remove(order)
+        if len(order_products) <= 0:
+            break
         
     
     return deliveries

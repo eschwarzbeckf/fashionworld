@@ -27,6 +27,7 @@ def add_initial_data(db: Session, supplier_id: Sequence):
                 db.add(
                     models.SupplierError(
                         supplier_id=supplier_id_value,
+                        name=supplier_name,
                         error_rate=0.05,
                         packaging_quality_rate=0.01
                     )

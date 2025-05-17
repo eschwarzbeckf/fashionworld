@@ -46,7 +46,7 @@ class RecievedDelivery(BaseModel):
     reception_date: datetime = Field(description="date of the reception", default=datetime.now())
     quantity_recieved: int = Field(description="total boxes recieved", gt=0)
     on_time: Optional[bool] = Field(description="If delivery was recieved on the accorded lead time", default=choices([True, False], weights=[0.8,0.2], k=1)[0])
-    package_quality: Optional[Literal['good','bad']] = Field(description="Quality of Package", default=choices(['good', 'bad'], weights=[0.97,0.03], k=1)[0])
+    package_quality: Optional[Literal['good','bad']] = Field(description="Quality of Package", default='good')
 
 class UpdatePackage(BaseModel):
     product_id: str = Field(description="Id of the product to update")

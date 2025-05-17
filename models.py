@@ -173,6 +173,7 @@ class Incidents(Base):
 class SupplierError(Base):
     __tablename__ = 'suppliers_error'
     supplier_id: Mapped[str] = mapped_column(String(8),ForeignKey('suppliers.supplier_id',ondelete='CASCADE'), unique=True, nullable=False, index=True, primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     error_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
     packaging_quality_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
 

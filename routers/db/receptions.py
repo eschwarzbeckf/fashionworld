@@ -89,10 +89,10 @@ def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
     issue_categories = np.array([word.lower() for word in proportions.index])
     probabilities = np.array(proportions.values)
     issue = random.choices([True,False],[error,1-error],k=1)[0]
-    if issue:
-        add_issue = random.choices(issue_categories,probabilities,k=1)[0]
-    elif delivery.package_quality == 'bad':
+    if delivery.package_quality == 'bad':
         add_issue = 'packaging damage'
+    elif issue:
+        add_issue = random.choices(issue_categories,probabilities,k=1)[0]
     else:
         add_issue = 'none'
     
@@ -106,6 +106,18 @@ def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
     return uuid
 
 def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> dict:
+        package_quality_rate,_ = db.execute(
+            select(
+                models.SupplierError.packaging_quality_rate,
+                models.SuppliersProducts.supplier_id
+            ).join(
+                models.SuppliersProducts,models.SuppliersProducts.product_id == delivery.product_id
+            ).where(
+                models.SuppliersProducts.product_id == delivery.product_id
+            )
+        ).first()
+        package_quality = choices(['good','bad'],[1-package_quality_rate,package_quality_rate],k=1)[0]
+        delivery.package_quality = package_quality
         uuid = assign_issue(delivery,db)
         to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
         deliveries_accepted = []
@@ -121,22 +133,22 @@ def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> 
             package_quality=delivery.package_quality
             )
         )
-        if to_audit:
+        if delivery.package_quality == 'bad':
             units_to_audit.append(ItemToAudit(
                 reception_id=id,
                 package_uuid=uuid,
                 product_id=delivery.product_id,
-                package_quality=delivery.package_quality
+               package_quality=delivery.package_quality
             ))
-        elif delivery.package_quality == 'bad':
+        elif to_audit:
             units_to_audit.append(ItemToAudit(
                 reception_id=id,
                 package_uuid=uuid,
                 product_id=delivery.product_id,
-                package_quality=delivery.package_quality
+               package_quality=delivery.package_quality
             ))
         
-        return {"deliveries_accepted":deliveries_accepted,"units_to_audit":units_to_audit}
+        return {"deliveries_accepted":deliveries_accepted,"units_to_audit":units_to_audit,"delivery":delivery}
 
 @router.post("/deliveries", status_code=status.HTTP_201_CREATED)
 async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,audit:float = 0.10):
@@ -208,6 +220,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                 response = recieve_process(delivery,generated_recieved_id,audit,db)
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
                 [audits_db.append(i) for i in response["units_to_audit"]]
+                delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
             update_orders(delivery,total_to_be_recieved,db)
 
@@ -218,6 +231,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                 response = recieve_process(delivery,generated_recieved_id,audit,db)
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
                 [audits_db.append(i) for i in response["units_to_audit"]]
+                delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
             update_orders(delivery,total_to_be_recieved,db)
             
