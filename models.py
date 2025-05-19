@@ -37,6 +37,7 @@ class Suppliers(Base):
     supplier_id: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True, primary_key=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False,default=func.now())
+    audit_level: Mapped[Float] = mapped_column(Float(3), nullable=False, default=0.1)
     active:Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     
     supplier_id_supplierprod: Mapped[List["SuppliersProducts"]] = relationship(back_populates="parent_suppliers")

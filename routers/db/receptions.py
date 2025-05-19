@@ -106,7 +106,7 @@ def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
     return uuid
 
 def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> dict:
-        package_quality_rate,_ = db.execute(
+        package_quality_rate,supplier_id = db.execute(
             select(
                 models.SupplierError.packaging_quality_rate,
                 models.SuppliersProducts.supplier_id
@@ -116,10 +116,18 @@ def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> 
                 models.SuppliersProducts.product_id == delivery.product_id
             )
         ).first()
+
+        audit_level, = db.execute(
+            select(
+                models.Suppliers.audit_level
+            ).where(
+                models.Suppliers.supplier_id == supplier_id
+            )
+        ).first()
         package_quality = choices(['good','bad'],[1-package_quality_rate,package_quality_rate],k=1)[0]
         delivery.package_quality = package_quality
         uuid = assign_issue(delivery,db)
-        to_audit = choices([False, True], weights=[1-audit,audit], k=1)[0]
+        to_audit = choices([False, True], weights=[1-audit_level,audit_level], k=1)[0]
         deliveries_accepted = []
         units_to_audit = []
         deliveries_accepted.append(models.Receptions(
