@@ -122,3 +122,33 @@ def add_density_data(db: Session):
             
     db.add_all(density_data)
     db.commit()
+
+def add_scorecard_data(db:Session):
+    scorecard_db = []
+    BATCH_SIZE = 1000
+    curr_row = 0
+    with open('./data/csv/scorecard.csv', 'r') as f:
+        reader = csv.DictReader(f)
+        suppliers = db.execute(select(models.Suppliers.name,models.Suppliers.supplier_id)).all()
+        supplier_ids = {supplier[0]:supplier[1] for supplier in suppliers}
+        for row in reader:
+            scorecard_db.append(models.Scorecard(
+                supplier_id=supplier_ids[row["SupplierName"].strip()],
+                num_month=int(row['Month']),
+                year=int(row['Year']),
+                total_incidents=int(row["TotalIncidents"]),
+                packages_handled=int(row['PackagesHandled']),
+                bad_packaging=float(row["BadPackagingRate"]),
+                cost_per_incident=float(row["CostPerIncident"]),
+                on_time_delivery=float(row["OnTimeDeliveryRate"]),
+                anomalies_detected=float(row["AnomaliesDetected"]),
+            ))
+            curr_row += 1
+            if curr_row >= BATCH_SIZE:
+                db.add_all(scorecard_db)
+                db.commit()
+                scorecard_db = []
+                curr_row = 0
+        
+        db.add_all(scorecard_db)
+        db.commit()

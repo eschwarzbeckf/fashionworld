@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from routers.llm import llm
 from routers.db import orders, products, packaging, suppliers, receptions, audits
 from database import engine, metadata
-from script import add_initial_data, add_density_data
+from script import add_initial_data, add_density_data, add_scorecard_data
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from contextlib import asynccontextmanager
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     db: Session = SessionLocal()
     add_initial_data(db,supplier_id) # Add data from CSV
     add_density_data(db)
+    add_scorecard_data(db)
     db.close()
     yield
     # Code to run on shutdown (optional)

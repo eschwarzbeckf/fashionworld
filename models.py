@@ -158,15 +158,15 @@ class Receptions(Base):
 
 class Scorecard(Base):
     __tablename__ = 'scorecard'
-    supplier_id: Mapped[str] = mapped_column(String(8),ForeignKey('suppliers.supplier_id',ondelete="CASCADE"), index=True, nullable=False)
+    supplier_id: Mapped[str] = mapped_column(String(9),ForeignKey('suppliers.supplier_id',ondelete="CASCADE"), index=True, nullable=False)
     num_month: Mapped[int] =mapped_column(Integer, nullable=False, index=True)
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    month: Mapped[str] = mapped_column(String(15))
-    bad_packaging_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    packages_handled: Mapped[int] = mapped_column(Integer, nullable=False)
+    bad_packaging: Mapped[int] = mapped_column(Integer, nullable=False)
     total_incidents: Mapped[int] = mapped_column(Integer, nullable=False)
-    avg_cost_per_incident: Mapped[float] = mapped_column(Float,nullable=False)
-    cost_units: Mapped[str] = mapped_column(String(5),nullable=False, default="EUR")
-    on_time_delivery_rate:Mapped[float] = mapped_column(Float,nullable=False)
+    cost_per_incident: Mapped[float] = mapped_column(Float(2),nullable=False)
+    currency: Mapped[str] = mapped_column(String(5),nullable=False, default="EUR")
+    on_time_delivery:Mapped[int] = mapped_column(Integer,nullable=False)
     anomalies_detected:Mapped[int] = mapped_column(Integer,nullable=False)
 
     parent_suppliers: Mapped["Suppliers"] = relationship(back_populates="supplier_id_scorecard")
