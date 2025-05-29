@@ -6,17 +6,13 @@ from datetime import datetime
 
 def add_initial_data(db: Session, supplier_id: Sequence):
     print("Application startup: Initializing...")
-    CSV_PROCESSING_BATCH_SIZE = 1000  # Number of rows to process at a time
-    current_batch = 0
-    supplier_product_relation = []
     products = []
-    packaging = []
-    with open('./data/csv/supplierproducts.csv', 'r') as file:
+    with open('./data/csv/supplierproducts_short.csv', 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             supplier_name = row['SupplierName'].strip()
-            db_supplier = db.query(models.Suppliers).filter(models.Suppliers.name == supplier_name).first()            
-            if db_supplier is None:
+            supplier_exists = db.query(exists().where(models.Suppliers.name == supplier_name)).scalar()
+            if not supplier_exists:
                 next_id_val = db.execute(select(supplier_id.next_value())).scalar_one()
                 supplier_id_value = f"SUP{next_id_val:05d}"
                 db.add(models.Suppliers(
@@ -34,68 +30,95 @@ def add_initial_data(db: Session, supplier_id: Sequence):
                 )
                 db.commit()
             else:
+                supplier_id_value = db.execute(select(models.Suppliers.supplier_id).where(models.Suppliers.name == supplier_name)).scalar()
                 supplier_id_value = supplier_id_value
             # exists_query = session.query(exists().where(User.email == email_to_check)).scalar()
-            product_exist_in_db = db.query(exists().where(models.Products.product_id == row["ProductReference"])).scalar()
-            product_exist_in_products = row["ProductReference"].strip() in [product.product_id for product in products]
+            product_id_curr = f"{row["ProductReference"].strip()+supplier_name[-1]}"
+            product_exist_in_db = db.query(exists().where(models.Products.product_id == product_id_curr)).scalar()
+            product_exist_in_products = product_id_curr in [product.product_id for product in products]
             if product_exist_in_db == False and product_exist_in_products == False:
-                products.append(models.Products(
+                db.add(models.Products(
                     garment_type=row['GarmentType'].strip().lower(),
                     material=row["Material"].strip().lower(),
                     size=row["Size"].strip().lower(),
                     collection=row["Collection"].strip().lower(),
                     weight_units="kg",
                     weight=float(row["Weight"].strip().lower()),
-                    product_id=row["ProductReference"].strip()
+                    product_id=product_id_curr
                 ))
 
-                supplier_product_relation.append(
+                db.add(
                     models.SuppliersProducts(
                         supplier_id=supplier_id_value,
-                        product_id=row['ProductReference']
+                        product_id=product_id_curr
                     )
                 )
-                db_packaging = db.query(models.Packaging).filter(models.Packaging.product_id == row["ProductReference"]).order_by(models.Packaging.revision.desc()).first()
-                try:
-                    print(db_packaging.revision)
-                except:
-                    pass
-                if db_packaging is None:
-                    packaging.append(models.Packaging(
-                        product_id=row['ProductReference'],
-                        revision=1,
-                        suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
-                        suggested_quantity=row['ProposedUnitsPerCarton'].strip(),
-                        suggested_layout=row['ProposedLayout'].strip().lower(),
-                        created_date=datetime.now()
-                    ))
-                else:
-                    packaging.append(models.Packaging(
-                        product_id=row['ProductReference'],
-                        revision=db_packaging.revision + 1,
-                        suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
-                        suggested_quantity=row['ProposedUnitsPerCarton'].strip(),
-                        suggested_layout=row['ProposedLayout'].strip().lower(),
-                        created_date=db_packaging.created_date,
-                        last_updated_date=datetime.now()
-                    ))
-                current_batch += 1
-            
-            if current_batch >= CSV_PROCESSING_BATCH_SIZE:
-                db.add_all(products)                
-                db.add_all(supplier_product_relation)
-                db.add_all(packaging)
                 db.commit()
-                current_batch = 0
-                supplier_product_relation = []
-                products = []
-                print(f"1000 records processed from {file.name}")
+                
+                db.add(models.Packaging(
+                    product_id=product_id_curr,
+                    revision=1,
+                    suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
+                    suggested_quantity=float(row['ProposedUnitsPerCarton']),
+                    suggested_layout=row['ProposedLayout'].strip().lower(),
+                    created_date=datetime.now()
+                ))
+                db.commit()
+            
+            else:
+                packaging_info = db.execute(select(models.Packaging.product_id,models.Packaging.revision,models.Packaging.created_date,models.Packaging.suggested_folding_method,models.Packaging.suggested_layout, models.Packaging.suggested_quantity).where(models.Products.product_id == product_id_curr).order_by(models.Packaging.product_id.desc(),models.Packaging.revision.desc())).first()
+                package_product_id, revision, created_date, suggested_folding, suggested_layout, suggested_quantity = packaging_info
+                revision = int(revision)
+                for left, right in zip([package_product_id, suggested_folding, suggested_layout, float(suggested_quantity)],[product_id_curr,row['ProposedFoldingMethod'].strip().lower(),row['ProposedLayout'].strip().lower(),float(row['ProposedUnitsPerCarton'].strip())]):
+                    if left != right:
+                        db.add(models.Packaging(
+                            product_id=package_product_id,
+                            revision=int(revision) + 1,
+                            suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
+                            suggested_quantity=float(row['ProposedUnitsPerCarton'].strip()),
+                            suggested_layout=row['ProposedLayout'].strip().lower(),
+                            created_date=created_date,
+                            last_updated_date=datetime.now()
+                        ))
+                        db.commit()
+                        break          
                     
-        
-        db.add_all(products)
-        db.add_all(supplier_product_relation)
-        db.add_all(packaging)
-        db.commit()
 
         print("CSV data processing finished. Application ready.")
             
+def add_density_data(db: Session):
+    print("Starting to add density data...")
+    CSV_PROCESSING_BATCH_SIZE = 1000
+    curr_row = 0
+    density_data = []
+    with open('./data/csv/density_short.csv', 'r') as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            supplier_name = row["SupplierName"].strip()
+            product_id = f'{row['ProductReference'].strip()+supplier_name[-1]}'
+            density_data.append(models.Density(
+                report_id=row["ReportID"].strip(),
+                date_created=datetime.now(),
+                date_of_report=datetime.strptime(row['DateOfReport'].strip(), '%Y-%m-%d'),
+                product_id =product_id,
+                garment_type=row['GarmentType'].strip().lower(),
+                material=row['Material'].strip().lower(),
+                size=row['Size'].strip().lower(),
+                collection=row['Collection'].strip().lower(),
+                weight=float(row['Weight'].strip()),
+                weight_units='kg',
+                suggested_folding_method=row['ProposedFoldingMethod'].strip().lower(),
+                suggested_quantity=float(row['ProposedUnitsPerCarton'].strip()),
+                suggested_layout=row['ProposedLayout'].strip().lower(),
+                packaging_quality=row['PackagingQuality'].strip().lower()
+            ))
+            curr_row += 1
+            if curr_row >= CSV_PROCESSING_BATCH_SIZE:
+                db.add_all(density_data)
+                db.commit()
+                density_data = []
+                curr_row = 0
+            
+    db.add_all(density_data)
+    db.commit()

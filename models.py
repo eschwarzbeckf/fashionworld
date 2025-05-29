@@ -9,6 +9,7 @@ reception_id = Sequence('reception_id_seq', start=1, increment=1, metadata=metad
 order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
 audit_id = Sequence('audit_id_seq', start=1, increment=1, metadata=metadata)
 product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
+density_id = Sequence('density_id_seq', start=1, increment=1, metadata=metadata)
 
 class Products(Base):
     __tablename__ = 'products'
@@ -75,8 +76,20 @@ class Packaging(Base):
 
 class Density(Base):
     __tablename__="density"
-    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"),primary_key=True)
+    report_id:Mapped[str] = mapped_column(String(10), unique=True, nullable=False, index=True, primary_key=True)
+    date_created: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     date_of_report:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"))
+    garment_type:Mapped[str] = mapped_column(String(50), nullable=False)
+    material: Mapped[str] = mapped_column(String(50), nullable=False)
+    size: Mapped[str] = mapped_column(String(5), nullable=True)
+    collection: Mapped[str] = mapped_column(String(25), nullable=True)
+    weight: Mapped[float] = mapped_column(Float(3), nullable=False)
+    weight_units: Mapped[str] = mapped_column(String(5), nullable=False, default="kg")
+    suggested_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)
+    suggested_quantity:Mapped[float] = mapped_column(Float, nullable=False)
+    suggested_layout:Mapped[str] = mapped_column(String(25), nullable=False)
+    packaging_quality: Mapped[str] = mapped_column(String(25), nullable=False)
 
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_density")
 
