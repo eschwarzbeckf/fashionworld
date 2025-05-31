@@ -69,5 +69,5 @@ async def create_audit(items: List[ItemToAudit], db:db_dependency):
 
     return {"message":"Audit created","audits":audit_db}
         
-        
+
 

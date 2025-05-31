@@ -10,12 +10,11 @@ from datetime import datetime
 from random import choices
 from uuid import uuid4
 from validations import RecievedDelivery, ItemToAudit
+from database import engine
 
-density = pd.read_csv(r'C:\Users\esteb\Projects\MBD\Capgemin\app\data\csv\density.csv',encoding='utf-8')
-density_suppliers = density.groupby(['DateOfReport','SupplierName']).count()
-density_products = density.groupby(['DateOfReport','SupplierName','ProductReference']).count()
-
-
+density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
+density_suppliers = density.groupby(['date_of_report','name']).count()
+density_products = density.groupby(['date_of_report','name','product_id']).count()
 
 def create_fake_order(db:Session) -> dict:
     # Data to return
@@ -27,7 +26,7 @@ def create_fake_order(db:Session) -> dict:
         supplier = f'Supplier{supplier}'
 
         # Creates The historical data for the supplier
-        orders_historical = density_suppliers[density_suppliers.index.get_loc_level(supplier,level=1)[0]]['ProductReference']
+        orders_historical = density_suppliers[density_suppliers.index.get_loc_level(supplier,level=1)[0]]['product_id']
 
         # Normal distribution of the orders
         model = ss.norm.fit(orders_historical)
@@ -36,7 +35,7 @@ def create_fake_order(db:Session) -> dict:
         total_products = round(random.normalvariate(model[0],model[1]),0)
         
         # Proportions table
-        proportions = density_products[density_products.index.get_loc_level(supplier,level=1)[0]]['GarmentType'].value_counts(normalize=True)
+        proportions = density_products[density_products.index.get_loc_level(supplier,level=1)[0]]['garment_type'].value_counts(normalize=True)
 
         # Quantity to place per product
         quantities = np.array(proportions.index)
@@ -110,9 +109,13 @@ async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
             order_products.remove(order)
         if len(order_products) <= 0:
             break
-        
     
     return deliveries
+
+def audit_result(audit, db:Session):
+    result = ''
+    
+    return result
 
 def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
     """Updates the Orders table to the filled status and adds when it was recieved.

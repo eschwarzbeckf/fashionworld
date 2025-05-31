@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from database import metadata,get_db
+from database import get_db
 from validations import PlaceOrder, ConfirmOrder
 import models
 from typing import List, Annotated

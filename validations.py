@@ -14,7 +14,7 @@ class Product(BaseModel):
     collection: Optional[Literal['summer','winter','fall','spring']] = Field(default=None, description="The collection of the garment.")
     weight_units: Optional[Literal['kg']] = Field(default="g", description="The unit of weight, default is grams.")
     weight: Optional[float] = Field(default=None,description="The weight of the garment.")
-    product_id: Optional[str] = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the product.")
+    product_id: Optional[str] = Field(default=None, min_length=1, max_length=9, description="The unique identifier for the product.")
 
 class Supplier(BaseModel):
     name: Optional[str] = Field(default=None,min_length=3, max_length=50, description="The name of the supplier.")
@@ -25,7 +25,7 @@ class SupplierProducts(BaseModel):
     data: List[Product] = Field(default=[], description="List of products.")
 
 class Item(BaseModel):
-    product_id: str = Field(default=None, min_length=1, max_length=8, description="The unique identifier for the product.")
+    product_id: str = Field(default=None, min_length=1, max_length=9, description="The unique identifier for the product.")
     boxes_ordered: int = Field(default=1, description="The number of boxes ordered.")
 
 class PlaceOrder(BaseModel):
