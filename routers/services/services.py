@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 from sqlalchemy import select, func, update
 from typing import List
 import pandas as pd
@@ -86,6 +87,9 @@ async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
             models.Orders.product_id
         )
     ).all()
+
+    if len(orders_db) == 0:
+        raise HTTPException(status_code=400, detail="No order on confirmed status")
 
     order_products = [RecievedDelivery(order_id=order_id,product_id=product_id,quantity_recieved=total_boxes) for order_id,product_id,total_boxes in orders_db]
     capacity = random.choices([1000,500,200,10],weights=[0.35,0.35,0.2,0.1],k=1)[0]
