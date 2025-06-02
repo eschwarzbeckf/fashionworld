@@ -14,6 +14,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.linear_model import LinearRegression
 import random
+import numpy as np
 
 with open(r'C:\Users\esteb\Projects\MBD\Capgemin\app\routers\machinelearning\lr.pkl','rb') as f:
     model = pickle.load(f)
@@ -49,46 +50,50 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
         item_audits = len(receptions) if len(item_audits) < audit_quantity else item_audits
     elif sampling.lower() == "model":
         pass
+
     uuids = ""
+    
     for item in item_audits["package_uuid"].values:
         uuids += f"\"{item}\"" if uuids == "" else f",\"{item}\""
+
     products_issues_statuses = pd.read_sql_query(f"SELECT * FROM products_defects WHERE uuid IN ({uuids})",con=engine)
-    item_audits = item_audits.set_index('package_uuid').join(products_issues_statuses.set_index('uuid'),rsuffix='_defects')
+    item_audits = item_audits.set_index('package_uuid').join(products_issues_statuses.set_index('uuid'),rsuffix='_defects').rename(columns={"issue":"issue_description"})
+    x = item_audits[['issue_description','garment_type','material','size','collection','weight']]
+    cost_log = model.predict(x)
+    cost = np.round(10**cost_log,3)
+    item_audits["estimated_cost"] = cost
+    item_audits.reset_index(inplace=True)
     
-    for item in item_audits:
-        x = pd.DataFrame([[issue,garment_type,material,size,collection,weight]],columns=['issue_description','garment_type','material','size','collection','weight'])
-        cost_log = model.predict(x)[0]
-        cost = round(10**cost_log,3)
+    for idx in item_audits.index:
         next_id_val = db.execute(select(audit_id.next_value())).scalar_one()
         generated_audit_id = f"AUD{next_id_val:08d}"
- 
         audit_db.append(
             models.Audits(
                 audit_id=generated_audit_id,
-                reception_id=item.reception_id,
-                product_id=item.product_id,
-                package_uuid=item.package_uuid,
+                reception_id=item_audits.loc[idx,"reception_id"],
+                product_id=item_audits.loc[idx,"product_id"],
+                package_uuid=item_audits.loc[idx,"package_uuid"],
                 created_date=datetime.now(),
-                packaging_quality=item.package_quality,
-                issue_description=issue,
+                packaging_quality=item_audits.loc[idx,"package_quality"],
+                issue_description=item_audits.loc[idx, "issue_description"],
                 audit_date=datetime.now(),
-                cost_impact=cost
+                cost_impact=item_audits.loc[idx,"estimated_cost"]
             )
         )
 
         for criteria in audit_criterias:
-            if issue in criteria.accept_categories:
+            if item_audits.loc[idx,"issue_description"] in criteria["accept_categories"]:
                 units_without_issues += 1
-            elif issue in criteria.reject_categories:
+            elif item_audits.loc[idx,"issue_description"] in criteria["reject_categories"]:
                 units_with_issues += 1
             else:
                 unknown_issue += 1
 
-            if criteria.accepted_quantity > 0:
-                if units_without_issues == criteria.accepted_quantity:
+            if criteria["accepted_quantity"] > 0:
+                if units_without_issues == criteria["accepted_quantity"]:
                     audit_ended = True
-            if criteria.rejected_quantity > 0:
-                if units_with_issues == criteria.rejected_quantity:
+            if criteria["rejected_quantity"] > 0:
+                if units_with_issues == criteria["rejected_quantity"]:
                     audit_ended = True
         
         if audit_ended:

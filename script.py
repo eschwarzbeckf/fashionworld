@@ -11,7 +11,7 @@ def add_initial_data(db: Session, supplier_id: Sequence):
     supplier_products = []
     BATCH_SIZE = 1000
     counter = 0
-    with open('./data/csv/supplierproducts.csv', 'r') as file:
+    with open('./data/csv/supplierproducts_short.csv', 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             supplier_name = row['SupplierName'].strip()
@@ -151,7 +151,7 @@ def add_density_data(db: Session):
     CSV_PROCESSING_BATCH_SIZE = 1000
     curr_row = 0
     density_data = []
-    with open('./data/csv/density.csv', 'r') as f:
+    with open('./data/csv/density_short.csv', 'r') as f:
         reader = csv.DictReader(f)
 
         for row in reader:
