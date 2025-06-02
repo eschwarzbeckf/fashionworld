@@ -65,7 +65,16 @@ class OrderFakeData(BaseModel):
     supplier: str = Field(description="Fake Supplier Name")
     product_id: str = Field(description="Product_id")
 
+class AuditOrder(BaseModel):
+    order_id: str = Field(description="Order to audit")
+class AuditCriteria(BaseModel):
+    criteria_name: str = Field(description="Description of the items to look for")
+    accept_categories: List[str] = Field(description="Attributes that we consider to accept package")
+    reject_categories: List[str] = Field(description="Attributes that we consider to reject package")
+    accepted_quantity: int = Field(description="Minimum acceptance quantity",ge=0, default=0)
+    rejected_quantity: int = Field(description="Minimum rejected quantity", default=0, ge=0)
 
-    
-
-
+class AuditPlan(BaseModel):
+    audit_criterias: List[AuditCriteria] = Field(description="The Audit Criteria to be used")
+    sampling: Literal["random","model"] = Field(description="Type of sampling either using a ML model or random sampling", default="random")
+    audit_quantity: int = Field(description="Total amount to check", default=5, gt=0)

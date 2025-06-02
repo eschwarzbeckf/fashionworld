@@ -20,11 +20,25 @@ def create_fake_order(db:Session) -> dict:
     # Data to return
     data = []
     
+    db_supplier_ids = db.execute(
+        select(
+            models.Suppliers.supplier_id,
+            models.Suppliers.name
+        )
+    ).all()
+
+    products_suppliers_db = db.execute(
+        select(
+            models.SuppliersProducts.supplier_id,
+            models.SuppliersProducts.product_id
+        ).distinct()
+    ).all()
+
     # Each order
     for supplier in ['A','B','C','D','F','G','H']:
         # Set Supplier name
         supplier = f'Supplier{supplier}'
-
+        supplier_id = [id[0] if supplier == id[1] else id[0] for id in db_supplier_ids][0]
         # Creates The historical data for the supplier
         orders_historical = density_suppliers[density_suppliers.index.get_loc_level(supplier,level=1)[0]]['product_id']
 
@@ -44,24 +58,7 @@ def create_fake_order(db:Session) -> dict:
         probabilities = np.array(proportions.values)
         curr_items = 0
 
-        db_supplier_id = db.execute(
-                select(
-                    models.Suppliers.supplier_id
-                ).where(
-                    models.Suppliers.name == supplier.lower()
-                )
-            ).first()
-        
-        product_supplier_db = db.execute(
-                select(
-                    models.SuppliersProducts.supplier_id,
-                    models.SuppliersProducts.product_id
-                ).where(
-                    models.SuppliersProducts.supplier_id == db_supplier_id[0]
-                ).distinct()
-            ).all()
-        products = [product[1] for product in product_supplier_db]
-        products = list(set(products))
+        products = [product[1] for product in filter(lambda x: x[0] == supplier_id, products_suppliers_db)]
         items = []
         while curr_items < total_products:
             product = random.choice(products)
@@ -138,26 +135,30 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
                 models.Orders.boxes_ordered
             )
     order_db = db.execute(stmt).all()
+    orders_to_update =[]
     for order in order_db:
         # For each order, check if the total recieved amount is less than the order,
         # If it is, then the order is considered filled. so we need to update the status, and the filled date
         if order[3] <= total_to_be_recieved:
-            update_statement = update(
-                    models.Orders
-                ).where(
-                    models.Orders.order_id == order[0],
-                    models.Orders.product_id == order[1],
-                    models.Orders.item_no == order[2]
-                ).values(
-                    order_filled_date=datetime.now(),
-                    order_status='filled',
-                    last_updated=datetime.now()
-                )
-            db.execute(update_statement)
+            orders_to_update.append(
+                {
+                    "order_id":order[0],
+                    "item_no":order[2],
+                    "product_id":order[1],
+                    "order_filled_date":datetime.now(),
+                    "order_status":"filled",
+                    "last_updated":datetime.now()
+                }
+            )
             # We need to remove the units we assigned to the order
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
+    db.execute(
+        update(models.Orders),
+        orders_to_update
+    )
+    db.commit()
 
 def assign_issue(delivery: RecievedDelivery,db:Session, package_quality) -> str:
     uuid = str(uuid4())

@@ -25,50 +25,46 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
     
     # Set our variables to save and do the update
     delivery_db = []
-    audits_db = []
     packages_to_return = []
     order_updates = []
     # Gerate the delivery id
     next_id_val = db.execute(select(reception_id.next_value())).scalar_one()
     generated_recieved_id = f"REC{next_id_val:08d}"
-    for delivery in deliveries:
-        # query which orders are not filled and are confirmed
-        order_db = db.execute(
-            select(
-                models.Orders.order_id,
-                models.Orders.product_id,
-                func.sum(models.Orders.boxes_ordered).label('total_boxes_order')
-                ).where(
-                    models.Orders.order_id == delivery.order_id,
-                    models.Orders.product_id == delivery.product_id,
-                    models.Orders.order_status == 'confirmed'
-                ).group_by(
-                    models.Orders.order_id,
-                    models.Orders.product_id
-                ).order_by(
-                    models.Orders.boxes_ordered.desc()
-                    )
-                ).all()
-        # check the packages we have recieved
-        recieved_db = db.execute(
-            select(
-                models.Receptions.order_id,
-                models.Receptions.product_id,
-                func.count(models.Receptions.product_id).label('total_boxes_recieved')
+    orders_db = db.execute(
+        select(
+            models.Orders.order_id,
+            models.Orders.product_id,
+            func.sum(models.Orders.boxes_ordered).label('total_boxes_order')
             ).where(
-                models.Receptions.order_id == delivery.order_id,
-                models.Receptions.product_id == delivery.product_id,
+                models.Orders.order_status == 'confirmed'
             ).group_by(
-                models.Receptions.order_id,
-                models.Receptions.product_id
-            )
-        ).all()
+                models.Orders.order_id,
+                models.Orders.product_id
+            ).order_by(
+                models.Orders.boxes_ordered.desc()
+                )
+            ).all()
+    recieved_db = db.execute(
+        select(
+            models.Receptions.order_id,
+            models.Receptions.product_id,
+            func.count(models.Receptions.product_id).label('total_boxes_recieved')
+        ).group_by(
+            models.Receptions.order_id,
+            models.Receptions.product_id
+        )
+    ).all()
+    for delivery in deliveries:
 
+        # query which orders are not filled and are confirmed
+        orders = [order for order in filter(lambda x: x[0] == delivery.order_id and x[1] == delivery.product_id,orders_db)]
+        # check the packages we have recieved
+        recieved = [event for event in filter(lambda x: x[0] == delivery.order_id and x[1] == delivery.product_id,recieved_db)]
         # Else need to check the quantities of the orders, so:
         # Need to get the order quantity from the orders
-        order_quantity = int(sum([order[2] for order in order_db if order.order_id == delivery.order_id]))
+        order_quantity = int(sum([order[2] for order in orders if order.order_id == delivery.order_id]))
         # Know how much we have recieved
-        recieved_quantity = int(sum([recieved[2] for recieved in recieved_db]))
+        recieved_quantity = int(sum([event[2] for event in recieved]))
         # What we have would be if we accept all the delivery the amount of packages
         total_to_be_recieved = recieved_quantity + delivery.quantity_recieved # What would be recieved if accept ALL the delivery + what we have already accepted
         pending_to_recieve = order_quantity - recieved_quantity # What is pending to recieve in the current order
@@ -87,7 +83,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
             for package in range(delivery.quantity_recieved):
                 response = recieve_process(delivery,generated_recieved_id,audit,db)
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
-                [audits_db.append(i) for i in response["units_to_audit"]]
                 delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
             update_orders(delivery,total_to_be_recieved,db)
@@ -98,7 +93,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
             for package in range(int(pending_to_recieve)):
                 response = recieve_process(delivery,generated_recieved_id,audit,db)
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
-                [audits_db.append(i) for i in response["units_to_audit"]]
                 delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
             update_orders(delivery,total_to_be_recieved,db)
@@ -109,15 +103,11 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
             
     # Add the deliveries to the database
     db.add_all(delivery_db)
-    if len(audits_db) > 0:
-        audit_message = await create_audit(audits_db,db)
-    else:
-        audit_message={"audits":"No Audits Created"}
 
     if len(order_updates) > 0:
         db.add_all(order_updates)
     db.commit()
-    return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return,"packages_for_audit":audit_message["audits"]}
+    return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return}
 
 @router.get("/deliveries_fake", status_code=status.HTTP_201_CREATED)
 async def fake_package_recieved(db:db_dependency):    
