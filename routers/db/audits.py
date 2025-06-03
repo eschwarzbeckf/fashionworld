@@ -4,7 +4,7 @@ from typing import List, Annotated
 from models import audit_id
 from database import get_db, engine
 from validations import AuditOrder, AuditPlan
-from sqlalchemy import select
+from sqlalchemy import select, update
 import models
 from datetime import datetime
 import pickle
@@ -14,6 +14,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.linear_model import LinearRegression
 import random
+from datetime import datetime
 import numpy as np
 
 with open(r'C:\Users\esteb\Projects\MBD\Capgemin\app\routers\machinelearning\lr.pkl','rb') as f:
@@ -32,11 +33,13 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
     elif audit_plan is None:
         raise HTTPException(status_code=400, detail="No audit criteria provided")
     orders = ""
-    
+    results = {}
+    failed_orders = []
     for item in items:
         orders += f"\"{item.order_id}\"" if orders == "" else f",\"{item.order_id}\""
+        results[item.order_id]={"status":"pass","pass":[],"rejected":[],"unknown":[]}
 
-    receptions = pd.read_sql_query(f"SELECT * FROM receptions as r JOIN products as p on p.product_id = r.product_id WHERE r.order_id IN ({orders})", con=engine)
+    receptions = pd.read_sql_query(f"SELECT r.*,p.garment_type,p.material,p.size,p.collection,p.weight FROM receptions as r JOIN products as p on p.product_id = r.product_id WHERE r.order_id IN ({orders})", con=engine)
     audit_criterias, sampling, audit_quantity = audit_plan.model_dump().values()
     units_without_issues = 0
     units_with_issues = 0
@@ -44,6 +47,7 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
     audit_ended = False
 
     audit_db = []
+    
 
     if sampling.lower() == "random":
         item_audits = receptions.sample(audit_quantity)
@@ -60,7 +64,7 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
     item_audits = item_audits.set_index('package_uuid').join(products_issues_statuses.set_index('uuid'),rsuffix='_defects').rename(columns={"issue":"issue_description"})
     x = item_audits[['issue_description','garment_type','material','size','collection','weight']]
     cost_log = model.predict(x)
-    cost = np.round(10**cost_log,3)
+    cost = np.round(10**cost_log,2)
     item_audits["estimated_cost"] = cost
     item_audits.reset_index(inplace=True)
     
@@ -84,22 +88,61 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
         for criteria in audit_criterias:
             if item_audits.loc[idx,"issue_description"] in criteria["accept_categories"]:
                 units_without_issues += 1
+                results[item_audits.loc[idx,"order_id"]]["pass"].append(
+                    {
+                        "product_id":item_audits.loc[idx,"product_id"],
+                        "uuid":item_audits.loc[idx,"package_uuid"],
+                        "package_quality":item_audits.loc[idx,"package_quality"],
+                        "issue":item_audits.loc[idx, "issue_description"],
+                        "cost_impact":item_audits.loc[idx,"estimated_cost"]
+                    }
+                )
+            
             elif item_audits.loc[idx,"issue_description"] in criteria["reject_categories"]:
                 units_with_issues += 1
+                results[item_audits.loc[idx,"order_id"]]["rejected"].append(
+                    {
+                        "product_id":item_audits.loc[idx,"product_id"],
+                        "uuid":item_audits.loc[idx,"package_uuid"],
+                        "package_quality":item_audits.loc[idx,"package_quality"],
+                        "issue":item_audits.loc[idx, "issue_description"],
+                        "cost_impact":item_audits.loc[idx,"estimated_cost"]
+                    }
+                )
             else:
                 unknown_issue += 1
+                results[item_audits.loc[idx,"order_id"]]["unknown"].append(
+                    {
+                        "product_id":item_audits.loc[idx,"product_id"],
+                        "uuid":item_audits.loc[idx,"package_uuid"],
+                        "package_quality":item_audits.loc[idx,"package_quality"],
+                        "issue":item_audits.loc[idx, "issue_description"],
+                        "cost_impact":0.00
+                    }
+                )
 
             if criteria["accepted_quantity"] > 0:
-                if units_without_issues == criteria["accepted_quantity"]:
+                if units_with_issues > criteria["accepted_quantity"]:
                     audit_ended = True
-            if criteria["rejected_quantity"] > 0:
-                if units_with_issues == criteria["rejected_quantity"]:
-                    audit_ended = True
+                    results[item_audits.loc[idx,"order_id"]]["status"]=f"rejected reached threshold for {criteria["criteria_name"]}"
+                    failed_orders.append(
+                        {
+                            "order_id":item_audits.loc[idx,"order_id"],
+                            "order_status":"rejected",
+                            "last_updated":datetime.now()
+                        }
+                    )
+
         
         if audit_ended:
             break
     
+    if len(failed_orders) > 0:
+        db.execute(
+            update(models.Orders),
+            failed_orders
+        )
     db.add_all(audit_db)
     db.commit()
 
-    return {"message":"Audit completed","results":"yes","audits":audit_db}
+    return {"message":"Audit completed","results":results}

@@ -126,6 +126,7 @@ class Audits(Base):
     issue_description:Mapped[str] = mapped_column(String(50), nullable=False)
     cost_impact:Mapped[float] = mapped_column(Float(3), nullable=True)
     audit_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    details:Mapped[str] = mapped_column(String(250), nullable=True)
 
     parent_products: Mapped["Products"] = relationship("Products",
                                                       back_populates="product_id_audits")

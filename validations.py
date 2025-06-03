@@ -71,8 +71,7 @@ class AuditCriteria(BaseModel):
     criteria_name: str = Field(description="Description of the items to look for")
     accept_categories: List[str] = Field(description="Attributes that we consider to accept package")
     reject_categories: List[str] = Field(description="Attributes that we consider to reject package")
-    accepted_quantity: int = Field(description="Minimum acceptance quantity",ge=0, default=0)
-    rejected_quantity: int = Field(description="Minimum rejected quantity", default=0, ge=0)
+    accepted_quantity: int = Field(description="Minimum acceptance of defects quantity",ge=0, default=0)
 
 class AuditPlan(BaseModel):
     audit_criterias: List[AuditCriteria] = Field(description="The Audit Criteria to be used")
