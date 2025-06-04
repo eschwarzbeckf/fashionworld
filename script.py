@@ -3,6 +3,8 @@ from sqlalchemy import Sequence, select, exists, text
 import models
 import csv
 from datetime import datetime
+import pandas as pd
+from database import engine
 
 def add_initial_data(db: Session, supplier_id: Sequence):
     print("Application startup: Initializing...")
@@ -212,3 +214,9 @@ def add_scorecard_data(db:Session):
         
         db.add_all(scorecard_db)
         db.commit()
+
+def add_supplier_error():
+    db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
+    density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
+    density_suppliers = density.groupby(['date_of_report','name']).count()
+    density_products = density.groupby(['date_of_report','name','product_id']).count()

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from routers.llm import llm
-from routers.db import orders, products, packaging, suppliers, receptions, audits
+from routers.db import orders, products, packaging, suppliers, receptions, audits, shipments
 from database import engine, metadata
 from script import add_initial_data, add_density_data, add_scorecard_data
 from sqlalchemy.orm import Session
@@ -34,6 +34,7 @@ app.include_router(suppliers.router)
 app.include_router(packaging.router)
 app.include_router(receptions.router)
 app.include_router(audits.router)
+app.include_router(shipments.router)
 
 @app.get("/")
 def read_root():

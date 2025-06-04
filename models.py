@@ -118,6 +118,7 @@ class Orders(Base):
 class Audits(Base):
     __tablename__ = 'audits'
     audit_id:Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True, primary_key=True)
+    audit_plan_name:Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     reception_id:Mapped[str] = mapped_column(String(12), ForeignKey('receptions.reception_id', ondelete="CASCADE"), nullable=False, index=True)
     product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     package_uuid:Mapped[str] = mapped_column(String(36), ForeignKey('receptions.package_uuid',ondelete="CASCADE"), nullable=False, index=True)
@@ -126,7 +127,6 @@ class Audits(Base):
     issue_description:Mapped[str] = mapped_column(String(50), nullable=False)
     cost_impact:Mapped[float] = mapped_column(Float(3), nullable=True)
     audit_date:Mapped[DateTime] = mapped_column(DateTime, nullable=True)
-    details:Mapped[str] = mapped_column(String(250), nullable=True)
 
     parent_products: Mapped["Products"] = relationship("Products",
                                                       back_populates="product_id_audits")
@@ -141,7 +141,6 @@ class Receptions(Base):
     product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     order_id:Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
     reception_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    to_audit:Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     on_time: Mapped[bool] = mapped_column(Boolean, nullable=False)
     package_quality: Mapped[str] = mapped_column(String(5), nullable=False)
 
@@ -199,5 +198,6 @@ class ProductsDefects(Base):
     uuid: Mapped[str] = mapped_column(String(36), primary_key=True,unique=True,nullable=False, index=True)
     product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
     issue: Mapped[str] = mapped_column(String(50), nullable=False)
+    cost_impact: Mapped[float] = mapped_column(Float(2), nullable=True)
 
     parent_products:Mapped["Products"] = relationship(back_populates="products_id_productsdefects")

@@ -39,8 +39,14 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
         orders += f"\"{item.order_id}\"" if orders == "" else f",\"{item.order_id}\""
         results[item.order_id]={"status":"pass","pass":[],"rejected":[],"unknown":[]}
 
-    receptions = pd.read_sql_query(f"SELECT r.*,p.garment_type,p.material,p.size,p.collection,p.weight FROM receptions as r JOIN products as p on p.product_id = r.product_id WHERE r.order_id IN ({orders})", con=engine)
-    audit_criterias, sampling, audit_quantity = audit_plan.model_dump().values()
+    receptions = pd.read_sql_query(f"""
+                                   SELECT r.*,o.item_no,p.garment_type,p.material,p.size,p.collection,p.weight 
+                                   FROM receptions as r 
+                                   JOIN orders as o ON o.order_id = r.order_id 
+                                   JOIN products as p on p.product_id = r.product_id 
+                                   WHERE r.order_id IN ({orders})
+                                   """, con=engine)
+    audit_name, audit_criterias, sampling, audit_quantity = audit_plan.model_dump().values()
     units_without_issues = 0
     units_with_issues = 0
     unknown_issue = 0
@@ -60,6 +66,10 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
     for item in item_audits["package_uuid"].values:
         uuids += f"\"{item}\"" if uuids == "" else f",\"{item}\""
 
+    all_reject_criterias = []
+    for criteria in audit_criterias:
+        all_reject_criterias += criteria["reject_categories"]
+
     products_issues_statuses = pd.read_sql_query(f"SELECT * FROM products_defects WHERE uuid IN ({uuids})",con=engine)
     item_audits = item_audits.set_index('package_uuid').join(products_issues_statuses.set_index('uuid'),rsuffix='_defects').rename(columns={"issue":"issue_description"})
     x = item_audits[['issue_description','garment_type','material','size','collection','weight']]
@@ -74,6 +84,7 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
         audit_db.append(
             models.Audits(
                 audit_id=generated_audit_id,
+                audit_plan_name=audit_name,
                 reception_id=item_audits.loc[idx,"reception_id"],
                 product_id=item_audits.loc[idx,"product_id"],
                 package_uuid=item_audits.loc[idx,"package_uuid"],
@@ -109,7 +120,7 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
                         "cost_impact":item_audits.loc[idx,"estimated_cost"]
                     }
                 )
-            else:
+            elif item_audits.loc[idx,"issue_description"] not in all_reject_criterias:
                 unknown_issue += 1
                 results[item_audits.loc[idx,"order_id"]]["unknown"].append(
                     {
@@ -125,13 +136,24 @@ async def create_audit(items: List[AuditOrder],audit_plan: AuditPlan, db:db_depe
                 if units_with_issues > criteria["accepted_quantity"]:
                     audit_ended = True
                     results[item_audits.loc[idx,"order_id"]]["status"]=f"rejected reached threshold for {criteria["criteria_name"]}"
-                    failed_orders.append(
-                        {
-                            "order_id":item_audits.loc[idx,"order_id"],
-                            "order_status":"rejected",
-                            "last_updated":datetime.now()
-                        }
-                    )
+                    for idx in receptions[receptions["order_id"] == item_audits.loc[idx,"order_id"]].index:
+                        failed_orders.append(
+                            {
+                                "order_id":receptions.loc[idx,"order_id"],
+                                "item_no":receptions.loc[idx,"item_no"],
+                                "order_status":"rejected",
+                                "last_updated":datetime.now()
+                            }
+                        )
+            else:
+                failed_orders.append(
+                    {
+                        "order_id":receptions.loc[idx,"order_id"],
+                        "item_no":receptions.loc[idx,"item_no"],
+                        "order_status":"pass",
+                        "last_updated":datetime.now()
+                    }
+                )
 
         
         if audit_ended:

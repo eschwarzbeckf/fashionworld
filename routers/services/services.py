@@ -13,33 +13,20 @@ from uuid import uuid4
 from validations import RecievedDelivery, ItemToAudit
 from database import engine
 
-density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
-density_suppliers = density.groupby(['date_of_report','name']).count()
-density_products = density.groupby(['date_of_report','name','product_id']).count()
-
 def create_fake_order(db:Session) -> dict:
     # Data to return
     data = []
     
-    db_supplier_ids = db.execute(
-        select(
-            models.Suppliers.supplier_id,
-            models.Suppliers.name
-        )
-    ).all()
-
-    products_suppliers_db = db.execute(
-        select(
-            models.SuppliersProducts.supplier_id,
-            models.SuppliersProducts.product_id
-        ).distinct()
-    ).all()
+    db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
+    density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
+    density_suppliers = density.groupby(['date_of_report','name']).count()
+    density_products = density.groupby(['date_of_report','name','product_id']).count()
 
     # Each order
     for supplier in ['A','B','C','D','F','G','H']:
         # Set Supplier name
         supplier = f'Supplier{supplier}'
-        supplier_id = [id[0] if supplier == id[1] else id[0] for id in db_supplier_ids][0]
+
         # Creates The historical data for the supplier
         orders_historical = density_suppliers[density_suppliers.index.get_loc_level(supplier,level=1)[0]]['product_id']
 
@@ -59,7 +46,7 @@ def create_fake_order(db:Session) -> dict:
         probabilities = np.array(proportions.values)
         curr_items = 0
 
-        products = [product[1] for product in filter(lambda x: x[0] == supplier_id, products_suppliers_db)]
+        products = db_suppliers_products[db_suppliers_products["name"] == supplier]["product_id"].tolist()
         items = []
         while curr_items < total_products:
             product = random.choice(products)
@@ -75,23 +62,12 @@ def create_fake_order(db:Session) -> dict:
     return data
 
 async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
-    orders_db = db.execute(
-        select(
-            models.Orders.order_id,
-            models.Orders.product_id,
-            func.sum(models.Orders.boxes_ordered).label('total_boxes')
-        ).where(
-            models.Orders.order_status == 'confirmed'
-        ).group_by(
-            models.Orders.order_id,
-            models.Orders.product_id
-        )
-    ).all()
-
+    orders_db = pd.read_sql("SELECT o.order_id, o.product_id, sum(o.boxes_ordered) as total_boxes FROM orders as o WHERE o.order_status = \"confirmed\" group by o.order_id, o.product_id;",con=engine)
+    
     if len(orders_db) == 0:
         raise HTTPException(status_code=400, detail="No order on confirmed status")
 
-    order_products = [RecievedDelivery(order_id=order_id,product_id=product_id,quantity_recieved=total_boxes) for order_id,product_id,total_boxes in orders_db]
+    order_products = [RecievedDelivery(order_id=order,product_id=product,quantity_recieved=quantity) for order, product, quantity in orders_db.values]
     capacity = random.choices([1000,500,200,10],weights=[0.35,0.35,0.2,0.1],k=1)[0]
     curr_load = 0
     deliveries = []
@@ -112,11 +88,6 @@ async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
             break
     
     return deliveries
-
-def audit_result(audit, db:Session):
-    result = ''
-    
-    return result
 
 def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
     """Updates the Orders table to the filled status and adds when it was recieved.
@@ -235,7 +206,6 @@ def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> 
             product_id=delivery.product_id,
             order_id=delivery.order_id,
             reception_date=datetime.now(),
-            to_audit=to_audit,
             on_time=delivery.on_time,
             package_quality=delivery.package_quality
             )

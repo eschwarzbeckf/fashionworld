@@ -74,6 +74,7 @@ class AuditCriteria(BaseModel):
     accepted_quantity: int = Field(description="Minimum acceptance of defects quantity",ge=0, default=0)
 
 class AuditPlan(BaseModel):
+    audit_plan_name: str = Field(description="Name of the plan", min_length=5, max_length=50)
     audit_criterias: List[AuditCriteria] = Field(description="The Audit Criteria to be used")
     sampling: Literal["random","model"] = Field(description="Type of sampling either using a ML model or random sampling", default="random")
     audit_quantity: int = Field(description="Total amount to check", default=5, gt=0)
