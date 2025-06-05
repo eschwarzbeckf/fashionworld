@@ -27,26 +27,28 @@ router = APIRouter(
 db_dependency = Annotated[Session, Depends(get_db)]
 
 @router.post("/create", status_code=status.HTTP_201_CREATED)
-async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampling:str="random"):
+def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampling:str="random"):
     if items is None:
         raise HTTPException(status_code=400, detail="No order information provided.")
     elif audit_plan is None:
         raise HTTPException(status_code=400, detail="No audit criteria provided")
+    items = list(set(items))
     orders = ""
-    results = {}
     update_orders = []
     for order in items:
         orders += f"\"{order}\"" if orders == "" else f",\"{order}\""
-        results[order]={"status":"pass","pass":[],"rejected":[],"unknown":[]}
 
     receptions = pd.read_sql_query(f"""
-                                   SELECT r.*,o.item_no,p.garment_type,p.material,p.size,p.collection,p.weight 
+                                   SELECT r.*,p.garment_type,p.material,p.size,p.collection,p.weight 
                                    FROM receptions as r 
-                                   JOIN orders as o ON o.order_id = r.order_id AND o.product_id = r.product_id
                                    JOIN products as p on p.product_id = r.product_id 
                                    WHERE r.order_id IN ({orders})
                                    """, con=engine)
-    
+    orders_db =   pd.read_sql_query(f"""
+                                    SELECT o.order_id, o.item_no, o.order_status
+                                    FROM orders as o
+                                    WHERE o.order_id in ({orders})
+                                    """,con=engine)
     uuids = ""
     for item in receptions["package_uuid"].values:
         uuids += f"\"{item}\"" if uuids == "" else f",\"{item}\""
@@ -63,26 +65,31 @@ async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,
     audit_name, audit_criterias, sampling, audit_quantity = audit_plan.model_dump().values()
 
     all_reject_criterias = []
-    for criteria in audit_criterias:
-        all_reject_criterias += criteria["reject_categories"]
+    issues = {}
+    results = {}
+    for order in items:
+        issues[order] = {}
+        results[order] = {"status":"pass","unknown":[]}
+        for criteria in audit_criterias:
+            all_reject_criterias += criteria["reject_categories"]
+            issues[order][criteria["criteria_name"]] = {"pass":0,"rejected":0} 
+            results[order][criteria["criteria_name"]] = {"pass":[],"rejected":[],"unknown":[]}
 
     audit_db = []
-    
+
     for order in items:
+        # Loop through each order
         audit_ended = False
-        units_without_issues = 0
-        units_with_issues = 0
-        unknown_issue = 0
         if sampling.lower() == "random":
             if audit_quantity > 0:
-                item_audits = receptions.sample(audit_quantity)
-                item_audits = len(receptions) if len(item_audits) < audit_quantity else item_audits
+                item_audits = receptions[receptions["order_id"] == order].sample(audit_quantity,replace=False)
+                item_audits = random.shuffle(receptions) if len(item_audits) < audit_quantity else item_audits
             else:
-                item_audits = receptions
+                item_audits = random.shuffle(receptions[receptions["order_id"] == order])
         elif sampling.lower() == "model":
             pass
         
-        for idx in item_audits[item_audits["order_id"] == order].index:
+        for idx in item_audits.index:
             next_id_val = db.execute(select(audit_id.next_value())).scalar_one()
             generated_audit_id = f"AUD{next_id_val:08d}"
             audit_db.append(
@@ -100,10 +107,12 @@ async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,
                 )
             )
 
-            for criteria in audit_criterias:
-                if item_audits.loc[idx,"issue_description"] in criteria["accept_categories"]:
-                    units_without_issues += 1
-                    results[item_audits.loc[idx,"order_id"]]["pass"].append(
+            for audit_criteria in audit_criterias:
+                criteria_name, accept_categories, reject_categories, accepted_quantity = audit_criteria.values()
+                if item_audits.loc[idx,"issue_description"] in accept_categories:
+                   # print(f"\n\n{order}\n{item_audits.loc[idx,"issue_description"]}\n'is in categories accepted: '{item_audits.loc[idx,"issue_description"] in criteria["accept_categories"]}\n{criteria["criteria_name"]}\n\n")
+                    issues[order][criteria_name]["pass"] += 1
+                    results[order][criteria_name]["pass"].append(
                         {
                             "product_id":item_audits.loc[idx,"product_id"],
                             "uuid":item_audits.loc[idx,"package_uuid"],
@@ -112,10 +121,10 @@ async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,
                             "cost_impact":item_audits.loc[idx,"estimated_cost"]
                         }
                     )
-                
-                elif item_audits.loc[idx,"issue_description"] in criteria["reject_categories"]:
-                    units_with_issues += 1
-                    results[item_audits.loc[idx,"order_id"]]["rejected"].append(
+                elif item_audits.loc[idx,"issue_description"] in reject_categories:
+                    issues[order][criteria_name]["rejected"] += 1
+                   # print(f"\n\n{order}\n{item_audits.loc[idx,"issue_description"]}\n'is in categories rejected: '{item_audits.loc[idx,"issue_description"] in criteria["reject_categories"]}\n{criteria["criteria_name"]}\n\n")
+                    results[order][criteria_name]["rejected"].append(
                         {
                             "product_id":item_audits.loc[idx,"product_id"],
                             "uuid":item_audits.loc[idx,"package_uuid"],
@@ -125,26 +134,26 @@ async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,
                         }
                     )
                 elif item_audits.loc[idx,"issue_description"] not in all_reject_criterias:
-                    unknown_issue += 1
-                    results[item_audits.loc[idx,"order_id"]]["unknown"].append(
+                   # print(f"\n\n{order}\n{item_audits.loc[idx,"issue_description"]}\n'is in categories unknown: '{item_audits.loc[idx,"issue_description"] in all_reject_criterias}\n{criteria["criteria_name"]}\n\n")
+                    results[order][criteria_name]["unknown"].append(
                         {
                             "product_id":item_audits.loc[idx,"product_id"],
                             "uuid":item_audits.loc[idx,"package_uuid"],
                             "package_quality":item_audits.loc[idx,"package_quality"],
                             "issue":item_audits.loc[idx, "issue_description"],
-                            "cost_impact":0.00
+                            "cost_impact":None
                         }
                     )
 
-                if criteria["accepted_quantity"] > -1:
-                    if units_with_issues > criteria["accepted_quantity"]:
+                if accepted_quantity > -1:
+                    if issues[order][criteria_name]["rejected"] > accepted_quantity:
                         audit_ended = True
-                        results[order]["status"]=f"rejected reached threshold for {criteria["criteria_name"]}"
-                        for idx2 in receptions[receptions["order_id"] == order].index:
+                        results[order]["status"]=f"rejected reached threshold for {criteria_name}"
+                        for idx2 in orders_db[orders_db["order_id"] == order].index:
                             update_orders.append(
                                 {
-                                    "order_id":receptions.loc[idx2,"order_id"],
-                                    "item_no":receptions.loc[idx2,"item_no"],
+                                    "order_id":orders_db.loc[idx2,"order_id"],
+                                    "item_no":orders_db.loc[idx2,"item_no"],
                                     "order_status":"rejected",
                                     "last_updated":datetime.now()
                                 }
@@ -155,12 +164,16 @@ async def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,
 
             if audit_ended:
                 break
+
+        if audit_ended:
+            print(order)
+            continue
             
-        for idx3 in receptions[receptions["order_id"] == order].index:
+        for idx3 in orders_db[orders_db["order_id"] == order].index:
             update_orders.append(
                     {
-                        "order_id":receptions.loc[idx3,"order_id"],
-                        "item_no":receptions.loc[idx3,"item_no"],
+                        "order_id":orders_db.loc[idx3,"order_id"],
+                        "item_no":orders_db.loc[idx3,"item_no"],
                         "order_status":"pass",
                         "last_updated":datetime.now()
                     }

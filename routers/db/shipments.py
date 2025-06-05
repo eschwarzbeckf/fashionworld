@@ -63,8 +63,7 @@ def ship_orders(orders:List[str],db: db_dependency):
     JOIN packaging as pa on pa.product_id = pd.product_id
     JOIN receptions as r on r.package_uui = pd.uuid
     WHERE a.cost_impact IS NULL AND r.order_id IN ({order_db})
-    """,con=engine
-    )
+    """,con=engine)
     
     x = df[['issue','garment_type','material','size','collection','weight']].rename(columns={"issue":"issue_description"})
     cost_log = model.predict(x)

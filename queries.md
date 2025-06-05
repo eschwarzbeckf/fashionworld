@@ -35,3 +35,11 @@ _Query:_
 ```sql
 select s.name, count(a.issue_description) as issues_found,total_issues,round(count(a.issue_description)/total_issues * 100,3) as percentage_found, round(sum(a.cost_impact),2) as estimated_cost, round(sum(a.cost_impact)/count(a.issue_description),2) as cost_per_audit, round(sum(a.cost_impact)/total_issues,2) as cost_per_unit from audits as a join suppliers_products as sp on a.product_id = sp.product_id join suppliers as s on sp.supplier_id = s.supplier_id join (select s.name,count(issue) as total_issues from products_defects as pd join suppliers_products as sp on pd.product_id = sp.product_id join suppliers as s on s.supplier_id = sp.supplier_id group by s.name) as pd on pd.name = s.name where a.issue_description != "none" group by s.name order by s.name;
 ```
+--------
+## Check cost of all audits and results of audits
+> Shows the status of the audits, the cost impact of each audit
+>
+_Query:_
+```sql
+select r.order_id, round(sum(cost_impact),2) as cost_impact, sum(o.boxes_ordered) as total_boxes, o.order_status from receptions as r left join audits as a on r.package_uuid = a.package_uuid join orders as o on o.order_id = r.order_id and r.product_id = o.product_id group by r.order_id, o.order_status;
+```
