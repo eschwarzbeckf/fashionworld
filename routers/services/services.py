@@ -12,6 +12,7 @@ from random import choices
 from uuid import uuid4
 from validations import RecievedDelivery, ItemToAudit
 from database import engine
+import time
 
 
 db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
@@ -100,6 +101,7 @@ def update_orders(total_to_be_recieved:int|float, orders:list):
     Return: total_to_be_recieved
     """
     # Select the orders that are relevant to the order and product, order them based on the boxes ordered
+    start_update_orders = time.time()
     orders_to_update =[]
     for order in orders:
         # For each order, check if the total recieved amount is less than the order,
@@ -119,41 +121,46 @@ def update_orders(total_to_be_recieved:int|float, orders:list):
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
-    
+    end_update_orders = time.time()
+    print("Total Order Update TIme: ",end_update_orders - start_update_orders)
     return orders_to_update
 
-def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
+def assign_issue(delivery: RecievedDelivery) -> tuple:
     global products_defects_rate
+    start_assign_issue = time.time()
     uuid = str(uuid4())
     issues_rates = products_defects_rate[(products_defects_rate["product_id"] == delivery.product_id) & (products_defects_rate["package_quality"] == delivery.package_quality)][["issue_description","defect_rate"]]
     issue = random.choices(issues_rates["issue_description"].unique(),issues_rates["defect_rate"].unique(),k=1)[0]
-    product_issue = models.ProductsDefects(
+    product_issue = [models.ProductsDefects(
         uuid = uuid,
         product_id=delivery.product_id,
         issue=issue
-    )
-    db.add(product_issue)
-    db.commit()
-    return uuid
+    )]
+    end_assign_issue = time.time()
+    
+    print("End Assign Issue: ", end_assign_issue-start_assign_issue)
+    return (uuid, product_issue)
 
-def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> dict:
-        rates = products_defects_rate[products_defects_rate["product_id"] == delivery.product_id]
-        qualities =  rates["package_quality"].unique()
-        qualities_rates = rates["package_quality_rate"].unique()
-        package_quality = choices(qualities,qualities_rates,k=1)[0]
-        delivery.package_quality = package_quality
-        uuid = assign_issue(delivery,db)
-        deliveries_accepted = []
-        deliveries_accepted.append(models.Receptions(
-            reception_id = id,
-            package_uuid=uuid,
-            product_id=delivery.product_id,
-            order_id=delivery.order_id,
-            reception_date=datetime.now(),
-            on_time=delivery.on_time,
-            package_quality=delivery.package_quality
-            )
+def recieve_process(deliveries:List[RecievedDelivery],id:str,db:Session) -> dict:
+    start_recieve_process = time.time()
+    rates = products_defects_rate[products_defects_rate["product_id"] == delivery.product_id]
+    qualities =  rates["package_quality"].unique()
+    qualities_rates = rates["package_quality_rate"].unique()
+    package_quality = choices(qualities,qualities_rates,k=1)[0]
+    delivery.package_quality = package_quality
+    (uuid,product_issue) = assign_issue(deliveries)
+    deliveries_accepted = []
+    deliveries_accepted.append(models.Receptions(
+        reception_id = id,
+        package_uuid=uuid,
+        product_id=delivery.product_id,
+        order_id=delivery.order_id,
+        reception_date=datetime.now(),
+        on_time=delivery.on_time,
+        package_quality=delivery.package_quality
         )
-        
-        return {"deliveries_accepted":deliveries_accepted,"delivery":delivery}
+    )
+    end_recieve_process = time.time()
+    print("Recieve Process Completed At: ", end_recieve_process - start_recieve_process)
+    return {"deliveries_accepted":deliveries_accepted,"delivery":delivery, "issues":product_issue}
 
