@@ -13,14 +13,17 @@ from uuid import uuid4
 from validations import RecievedDelivery, ItemToAudit
 from database import engine
 
-def create_fake_order(db:Session) -> dict:
+
+db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
+density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
+density_suppliers = density.groupby(['date_of_report','name']).count()
+density_products = density.groupby(['date_of_report','name','product_id']).count()
+products_defects_rate = pd.read_sql("SELECT * FROM products_defects_rate", con=engine)
+
+def create_fake_order() -> dict:
     # Data to return
+    global db_suppliers_products
     data = []
-    
-    db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
-    density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
-    density_suppliers = density.groupby(['date_of_report','name']).count()
-    density_products = density.groupby(['date_of_report','name','product_id']).count()
 
     # Each order
     for supplier in ['A','B','C','D','F','G','H']:
@@ -89,7 +92,7 @@ async def create_fake_delivery(db:Session) -> List[RecievedDelivery]:
     
     return deliveries
 
-def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
+def update_orders(total_to_be_recieved:int|float, orders:list):
     """Updates the Orders table to the filled status and adds when it was recieved.
     
     Keyword arguments:
@@ -97,21 +100,8 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
     Return: total_to_be_recieved
     """
     # Select the orders that are relevant to the order and product, order them based on the boxes ordered
-    stmt = select(
-            models.Orders.order_id,
-            models.Orders.product_id,
-            models.Orders.item_no,
-            models.Orders.boxes_ordered
-            ).where(
-                models.Orders.order_id == delivery.order_id,
-                models.Orders.product_id == delivery.product_id,
-                models.Orders.order_status == 'confirmed'
-            ).order_by(
-                models.Orders.boxes_ordered
-            )
-    order_db = db.execute(stmt).all()
     orders_to_update =[]
-    for order in order_db:
+    for order in orders:
         # For each order, check if the total recieved amount is less than the order,
         # If it is, then the order is considered filled. so we need to update the status, and the filled date
         if order[3] <= total_to_be_recieved:
@@ -129,77 +119,31 @@ def update_orders(delivery, total_to_be_recieved:int|float, db:Session):
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
-    db.execute(
-        update(models.Orders),
-        orders_to_update
-    )
-    db.commit()
-
-def assign_issue(delivery: RecievedDelivery,db:Session, package_quality) -> str:
-    uuid = str(uuid4())
-    incidents = pd.read_csv(r'C:\Users\esteb\Projects\MBD\Capgemin\app\data\csv\incidents.csv')
-    supplier_id, supplier_name = db.execute(
-        select(
-            models.SuppliersProducts.supplier_id,
-            models.Suppliers.name
-        ).join(
-            models.Suppliers, models.Suppliers.supplier_id == models.SuppliersProducts.supplier_id
-        ).where(
-            models.SuppliersProducts.product_id == delivery.product_id
-        )
-    ).first()
-    error, = db.execute(
-        select(
-            models.SupplierError.error_rate
-        ).where(
-            models.SupplierError.supplier_id == supplier_id
-        )
-    ).first()
-    proportions = incidents[(incidents['SupplierName']==supplier_name) & (incidents['IssueDescription'] != 'Packaging Damage')]['IssueDescription'].value_counts(normalize=True)
-    issue_categories = np.array([word.lower() for word in proportions.index])
-    probabilities = np.array(proportions.values)
-    issue = random.choices([True,False],[error,1-error],k=1)[0]
-    if delivery.package_quality == 'bad':
-        add_issue = 'packaging damage'
-    elif issue:
-        add_issue = random.choices(issue_categories,probabilities,k=1)[0]
-    else:
-        add_issue = 'none'
     
+    return orders_to_update
+
+def assign_issue(delivery: RecievedDelivery,db:Session) -> str:
+    global products_defects_rate
+    uuid = str(uuid4())
+    issues_rates = products_defects_rate[(products_defects_rate["product_id"] == delivery.product_id) & (products_defects_rate["package_quality"] == delivery.package_quality)][["issue_description","defect_rate"]]
+    issue = random.choices(issues_rates["issue_description"].unique(),issues_rates["defect_rate"].unique(),k=1)[0]
     product_issue = models.ProductsDefects(
         uuid = uuid,
         product_id=delivery.product_id,
-        issue=add_issue
+        issue=issue
     )
     db.add(product_issue)
     db.commit()
     return uuid
 
 def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> dict:
-        package_quality_rate,supplier_id = db.execute(
-            select(
-                models.SupplierError.packaging_quality_rate,
-                models.SuppliersProducts.supplier_id
-            ).join(
-                models.SuppliersProducts,models.SuppliersProducts.product_id == delivery.product_id
-            ).where(
-                models.SuppliersProducts.product_id == delivery.product_id
-            )
-        ).first()
-
-        audit_level, = db.execute(
-            select(
-                models.Suppliers.audit_level
-            ).where(
-                models.Suppliers.supplier_id == supplier_id
-            )
-        ).first()
-        package_quality = choices(['good','bad'],[1-package_quality_rate,package_quality_rate],k=1)[0]
+        rates = products_defects_rate[products_defects_rate["product_id"] == delivery.product_id]
+        qualities =  rates["package_quality"].unique()
+        qualities_rates = rates["package_quality_rate"].unique()
+        package_quality = choices(qualities,qualities_rates,k=1)[0]
         delivery.package_quality = package_quality
-        uuid = assign_issue(delivery,db,package_quality)
-        to_audit = choices([False, True], weights=[1-audit_level,audit_level], k=1)[0]
+        uuid = assign_issue(delivery,db)
         deliveries_accepted = []
-        units_to_audit = []
         deliveries_accepted.append(models.Receptions(
             reception_id = id,
             package_uuid=uuid,
@@ -210,20 +154,6 @@ def recieve_process(delivery:RecievedDelivery,id:str,audit:float,db:Session) -> 
             package_quality=delivery.package_quality
             )
         )
-        if delivery.package_quality == 'bad':
-            units_to_audit.append(ItemToAudit(
-                reception_id=id,
-                package_uuid=uuid,
-                product_id=delivery.product_id,
-               package_quality=delivery.package_quality
-            ))
-        elif to_audit:
-            units_to_audit.append(ItemToAudit(
-                reception_id=id,
-                package_uuid=uuid,
-                product_id=delivery.product_id,
-               package_quality=delivery.package_quality
-            ))
         
-        return {"deliveries_accepted":deliveries_accepted,"units_to_audit":units_to_audit,"delivery":delivery}
+        return {"deliveries_accepted":deliveries_accepted,"delivery":delivery}
 

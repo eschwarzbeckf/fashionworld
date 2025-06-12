@@ -1,5 +1,5 @@
 from database import Base,metadata
-from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, Sequence
+from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, Boolean, PrimaryKeyConstraint, Sequence, ForeignKeyConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 from typing import List
@@ -10,6 +10,7 @@ order_id = Sequence('order_id_seq', start=1, increment=1, metadata=metadata)
 audit_id = Sequence('audit_id_seq', start=1, increment=1, metadata=metadata)
 product_id = Sequence('product_id_seq', start=1, increment=1, metadata=metadata)
 density_id = Sequence('density_id_seq', start=1, increment=1, metadata=metadata)
+
 
 class Products(Base):
     __tablename__ = 'products'
@@ -27,10 +28,11 @@ class Products(Base):
     product_id_packaging: Mapped[List["Packaging"]] = relationship(back_populates="parent_products")
     product_id_density: Mapped[List["Density"]] = relationship(back_populates="parent_products")
     product_id_orderitems: Mapped[List["Orders"]] = relationship(back_populates="parent_products")
-    product_id_incidents: Mapped[List["Incidents"]] = relationship(back_populates="parent_products")
     product_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_products")
     product_id_audits: Mapped[List["Audits"]] = relationship(back_populates="parent_products")
     products_id_productsdefects: Mapped[List["ProductsDefects"]] = relationship(back_populates="parent_products")
+    products_id_reportedincidents: Mapped[List["ReportedIncidents"]] = relationship(back_populates="parent_products")
+    products_id_productsdefectsrate: Mapped[List["ProductsDefectsRate"]] = relationship(back_populates="parent_products")
     
 
 class Suppliers(Base):
@@ -38,12 +40,10 @@ class Suppliers(Base):
     supplier_id: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True, primary_key=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     created_date:Mapped[DateTime] = mapped_column(DateTime, nullable=False,default=func.now())
-    audit_level: Mapped[Float] = mapped_column(Float(3), nullable=False, default=0.1)
     active:Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     
     supplier_id_supplierprod: Mapped[List["SuppliersProducts"]] = relationship(back_populates="parent_suppliers")
     supplier_id_scorecard: Mapped[List["Scorecard"]] = relationship(back_populates="parent_suppliers")
-    supplier_id_suppliererrors: Mapped["SupplierError"] = relationship(back_populates="parent_suppliers")
 
 class SuppliersProducts(Base):
     __tablename__ = 'suppliers_products'
@@ -109,6 +109,7 @@ class Orders(Base):
 
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_orderitems")
     order_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_orders")
+    order_id_reportedissues: Mapped[List["ReportedIncidents"]] = relationship(back_populates="parent_orders")
     
 
     __table_args__ = (
@@ -175,24 +176,6 @@ class Scorecard(Base):
         PrimaryKeyConstraint('supplier_id','num_month','year', name='pk_scorecard'),
     )
 
-class Incidents(Base):
-    __tablename__ = 'incidents'
-    product_id:Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True, primary_key=True)
-    date_of_incident:Mapped[DateTime] = mapped_column(DateTime,nullable=False)
-    issue_description:Mapped[str] = mapped_column(String(50),nullable=False)
-    cost_impact:Mapped[float] = mapped_column(Float, nullable=False)
-
-    parent_products: Mapped["Products"] = relationship(back_populates='product_id_incidents')
-
-class SupplierError(Base):
-    __tablename__ = 'suppliers_error'
-    supplier_id: Mapped[str] = mapped_column(String(8),ForeignKey('suppliers.supplier_id',ondelete='CASCADE'), unique=True, nullable=False, index=True, primary_key=True)
-    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
-    error_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
-    packaging_quality_rate: Mapped[Float] = mapped_column(Float(3),nullable=False)
-
-    parent_suppliers:Mapped["Suppliers"] = relationship(back_populates="supplier_id_suppliererrors")
-
 class ProductsDefects(Base):
     __tablename__ ="products_defects"
     uuid: Mapped[str] = mapped_column(String(36), primary_key=True,unique=True,nullable=False, index=True)
@@ -201,3 +184,51 @@ class ProductsDefects(Base):
     cost_impact: Mapped[float] = mapped_column(Float(2), nullable=True)
 
     parent_products:Mapped["Products"] = relationship(back_populates="products_id_productsdefects")
+    productdefects_uuid_reportedissues:Mapped["ReportedIncidents"] = relationship(back_populates="parent_productsdefects")
+
+class ReportedIncidents(Base):
+    __tablename__ = "reported_incidents"
+    incident_id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, index=True)
+    uuid: Mapped[str] = mapped_column(String(36),ForeignKey("products_defects.uuid",ondelete="CASCADE"), nullable=False, index=True)
+    date_reported: Mapped[DateTime] = mapped_column(DateTime,nullable=False)
+    product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    order_id:Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    item_no:Mapped[str] = mapped_column(Integer, nullable=False, index=True)
+    cost_impact: Mapped[float] = mapped_column(Float(2), nullable=True)
+
+    parent_products:Mapped["Products"] = relationship(back_populates="products_id_reportedincidents")
+    parent_orders:Mapped["Orders"] = relationship(back_populates="order_id_reportedissues",foreign_keys=[order_id,item_no], primaryjoin="and_(Orders.order_id == ReportedIncidents.order_id, Orders.item_no == ReportedIncidents.item_no)")
+    parent_productsdefects:Mapped["ProductsDefects"] = relationship(back_populates="productdefects_uuid_reportedissues")
+
+    __table_args__=(
+        ForeignKeyConstraint(
+            ['order_id', 'item_no'],
+            ['orders.order_id', 'orders.item_no'],
+            ondelete="CASCADE"
+        ),
+    )
+
+class ProductsDefectsRate(Base):
+    __tablename__ = "products_defects_rate"
+    record: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(String(9),ForeignKey("products.product_id",ondelete="CASCADE") ,nullable=False, index=True)
+    suggested_folding_method:Mapped[str] = mapped_column(String(25), nullable=False)
+    suggested_quantity:Mapped[float] = mapped_column(Float, nullable=False)
+    suggested_layout:Mapped[str] = mapped_column(String(25), nullable=False)
+    package_quality: Mapped[str] = mapped_column(String(10),nullable=False, index=True)
+    package_quality_rate: Mapped[float] = mapped_column(Float(4), nullable=False)
+    issue_description: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    defect_rate: Mapped[float] = mapped_column(Float(4), nullable=False)
+
+    parent_products:Mapped["Products"] = relationship(back_populates="products_id_productsdefectsrate")
+
+class Incidents(Base):
+    __tablename__="incidents"
+    incident_id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True,index=True)
+    product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id: Mapped[str] = mapped_column(String(8), ForeignKey('suppliers.supplier_id', ondelete="CASCADE"), index=True, nullable=True)
+    date_of_incident: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    issue_description: Mapped[str] = mapped_column(String(40), nullable=False)
+    cost_impact: Mapped[float] = mapped_column(Float(2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(5),nullable=False, default="EUR")
+    

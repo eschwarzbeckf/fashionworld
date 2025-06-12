@@ -1,0 +1,66 @@
+ProductReference,SupplierName,DateOfIncident,IssueDescription,ResolutionStatus,CostImpact
+PRD00033,SupplierF,2024-02-10,Incorrect Folding,In Progress,335.0
+PRD00013,SupplierD,2024-06-16,Incorrect Folding,Resolved,406.25
+PRD00001,SupplierB,2023-12-09,Other,Resolved,263.0
+PRD00003,SupplierH,2023-02-01,Packaging Damage,Resolved,1635.0
+PRD00034,SupplierH,2024-01-25,Incorrect Folding,Not Resolved,331.25
+PRD00024,SupplierG,2023-08-26,Packaging Damage,In Progress,652.0
+PRD00011,SupplierF,2024-04-06,Incorrect Folding,Resolved,688.75
+PRD00017,SupplierF,2024-03-11,Other,Not Resolved,130.0
+PRD00014,SupplierE,2023-04-09,Other,In Progress,189.0
+PRD00007,SupplierB,2023-09-14,Labeling Error,Resolved,350.0
+PRD00004,SupplierC,2023-03-15,Other,Not Resolved,313.0
+PRD00001,SupplierB,2024-01-08,Other,Resolved,58.0
+PRD00030,SupplierE,2023-10-18,Incorrect Folding,In Progress,223.75
+PRD00009,SupplierD,2024-06-04,Other,Resolved,231.0
+PRD00012,SupplierD,2024-05-28,Incorrect Folding,Resolved,587.5
+PRD00002,SupplierF,2024-02-18,Other,Resolved,101.0
+PRD00001,SupplierC,2024-04-04,Other,Resolved,77.0
+PRD00013,SupplierB,2023-12-10,Incorrect Folding,Resolved,592.5
+PRD00001,SupplierC,2023-01-19,Other,Resolved,244.0
+PRD00017,SupplierB,2023-01-25,Other,Resolved,96.0
+PRD00005,SupplierB,2023-10-12,Labeling Error,Resolved,477.0
+PRD00023,SupplierD,2023-08-01,Incorrect Folding,In Progress,456.25
+PRD00027,SupplierF,2023-01-08,Incorrect Folding,In Progress,553.75
+PRD00022,SupplierC,2024-04-20,Labeling Error,Resolved,252.0
+PRD00006,SupplierC,2024-02-08,Incorrect Folding,Resolved,631.25
+PRD00023,SupplierC,2023-02-03,Incorrect Folding,Not Resolved,197.5
+PRD00012,SupplierF,2023-03-31,Incorrect Folding,In Progress,133.75
+PRD00023,SupplierA,2023-12-25,Incorrect Folding,Resolved,303.75
+PRD00021,SupplierA,2024-06-25,Packaging Damage,In Progress,1547.0
+PRD00023,SupplierA,2023-11-07,Incorrect Folding,In Progress,128.75
+PRD00025,SupplierH,2023-04-09,Packaging Damage,Resolved,2017.5
+PRD00006,SupplierF,2024-03-15,Incorrect Folding,In Progress,472.5
+PRD00013,SupplierD,2024-03-20,Incorrect Folding,In Progress,740.0
+PRD00001,SupplierA,2023-03-16,Packaging Damage,Resolved,873.0
+PRD00034,SupplierF,2023-02-05,Incorrect Folding,Resolved,678.75
+PRD00006,SupplierD,2024-01-10,Incorrect Folding,Resolved,332.5
+PRD00022,SupplierF,2024-03-07,Labeling Error,Resolved,140.0
+PRD00002,SupplierB,2023-12-06,Missing Items,Resolved,882.0
+PRD00019,SupplierB,2023-06-07,Other,Resolved,148.0
+PRD00020,SupplierC,2024-04-19,Other,Resolved,344.0
+PRD00007,SupplierC,2024-03-04,Labeling Error,Resolved,399.0
+PRD00027,SupplierC,2024-04-04,Incorrect Folding,In Progress,403.75
+PRD00019,SupplierA,2023-10-05,Other,In Progress,174.0
+PRD00033,SupplierB,2024-02-22,Incorrect Folding,Resolved,653.75
+PRD00007,SupplierG,2023-01-16,Labeling Error,Resolved,429.0
+PRD00033,SupplierB,2023-08-05,Incorrect Folding,Resolved,146.25
+PRD00012,SupplierF,2023-06-02,Incorrect Folding,Resolved,168.75
+PRD00033,SupplierA,2023-06-06,Incorrect Folding,Resolved,226.25
+PRD00016,SupplierC,2023-07-18,Labeling Error,Resolved,308.0
+PRD00005,SupplierD,2023-02-19,Labeling Error,Resolved,199.0
+PRD00020,SupplierA,2024-01-18,Other,Resolved,244.0
+PRD00028,SupplierG,2023-04-09,Incorrect Folding,Resolved,455.0
+PRD00008,SupplierA,2024-02-07,Labeling Error,Resolved,146.0
+PRD00004,SupplierC,2023-02-14,Other,Resolved,238.0
+PRD00012,SupplierA,2024-02-13,Incorrect Folding,Resolved,248.75
+PRD00007,SupplierB,2024-02-16,Labeling Error,Not Resolved,381.0
+PRD00017,SupplierH,2024-02-13,Missing Items,In Progress,916.0
+PRD00007,SupplierD,2023-11-22,Labeling Error,Resolved,207.0
+PRD00002,SupplierB,2023-08-01,Other,In Progress,55.0
+PRD00015,SupplierB,2024-05-16,Labeling Error,In Progress,497.0
+PRD00025,SupplierA,2023-02-03,Incorrect Folding,Resolved,623.75
+PRD00001,SupplierC,2023-09-01,Packaging Damage,Resolved,1658.0
+PRD00009,SupplierE,2023-07-19,Other,Not Resolved,80.0
+PRD00019,SupplierA,2023-03-01,Packaging Damage,Not Resolved,1443.0
+PRD00020,SupplierE,2024-01-26,Other,Resolved,234.0

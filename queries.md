@@ -43,3 +43,11 @@ _Query:_
 ```sql
 select r.order_id, round(sum(cost_impact),2) as cost_impact, sum(o.boxes_ordered) as total_boxes, o.order_status from receptions as r left join audits as a on r.package_uuid = a.package_uuid join orders as o on o.order_id = r.order_id and r.product_id = o.product_id group by r.order_id, o.order_status;
 ```
+--------
+## Gets the latest packaging configuration for each of the products
+> Latest packaging configuration for each of the products
+>
+_Query:_
+```sql
+select p.product_id,p.garment_type,p.material,p.size,p.collection,p.weight, pa.suggested_folding_method,pa.suggested_quantity,pa.suggested_layout from products as p join (select p1.product_id,p1.suggested_folding_method,p1.suggested_quantity,p1.suggested_layout,p1.revision from packaging as p1 where p1.revision = (select max(p2.revision) from packaging as p2 where p2.product_id = p1.product_id)) as pa on p.product_id = pa.product_id;
+```

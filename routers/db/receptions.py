@@ -2,7 +2,7 @@ from fastapi import APIRouter, status, HTTPException, Depends
 from validations import RecievedDelivery
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, update
-from database import get_db
+from database import get_db, engine
 from typing import List, Annotated
 import models
 from models import reception_id
@@ -26,43 +26,22 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
     # Set our variables to save and do the update
     delivery_db = []
     packages_to_return = []
-    order_updates = []
     # Gerate the delivery id
     next_id_val = db.execute(select(reception_id.next_value())).scalar_one()
     generated_recieved_id = f"REC{next_id_val:08d}"
-    orders_db = db.execute(
-        select(
-            models.Orders.order_id,
-            models.Orders.product_id,
-            func.sum(models.Orders.boxes_ordered).label('total_boxes_order')
-            ).where(
-                models.Orders.order_status == 'confirmed'
-            ).group_by(
-                models.Orders.order_id,
-                models.Orders.product_id
-            ).order_by(
-                models.Orders.boxes_ordered.desc()
-                )
-            ).all()
-    recieved_db = db.execute(
-        select(
-            models.Receptions.order_id,
-            models.Receptions.product_id,
-            func.count(models.Receptions.product_id).label('total_boxes_recieved')
-        ).group_by(
-            models.Receptions.order_id,
-            models.Receptions.product_id
-        )
-    ).all()
+    orders_db = pd.read_sql("SELECT order_id,product_id,item_no,boxes_ordered FROM orders WHERE order_status = \"confirmed\" ORDER BY boxes_ordered",con=engine).values
+    recieved_db = pd.read_sql("SELECT order_id, product_id, count(product_id) FROM receptions GROUP BY order_id, product_id", con=engine).values
+    orders_to_update = []
     for delivery in deliveries:
 
         # query which orders are not filled and are confirmed
         orders = [order for order in filter(lambda x: x[0] == delivery.order_id and x[1] == delivery.product_id,orders_db)]
         # check the packages we have recieved
         recieved = [event for event in filter(lambda x: x[0] == delivery.order_id and x[1] == delivery.product_id,recieved_db)]
+
         # Else need to check the quantities of the orders, so:
         # Need to get the order quantity from the orders
-        order_quantity = int(sum([order[2] for order in orders if order.order_id == delivery.order_id]))
+        order_quantity = int(sum([order[2] for order in orders if order[0] == delivery.order_id]))
         # Know how much we have recieved
         recieved_quantity = int(sum([event[2] for event in recieved]))
         # What we have would be if we accept all the delivery the amount of packages
@@ -75,7 +54,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
             total_to_be_recieved = order_quantity
             for package in range(int(order_quantity)):
                 # Fill orders
-                update_orders(delivery,total_to_be_recieved,db)
+                orders_to_update += update_orders(total_to_be_recieved,orders)
             
             
         elif order_quantity > total_to_be_recieved:
@@ -85,7 +64,7 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
                 delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
-            update_orders(delivery,total_to_be_recieved,db)
+            orders_to_update += update_orders(total_to_be_recieved,orders)
 
         elif order_quantity <= total_to_be_recieved:
             # If the order quantity is less or equals to the total to be recieved, then we will only take what is pending to recieve
@@ -95,17 +74,20 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency,
                 [delivery_db.append(i) for i in response["deliveries_accepted"]]
                 delivery = response["delivery"]
                 # After recieveing the delivery, we will update the orders and see if we can 'fill' the orders
-            update_orders(delivery,total_to_be_recieved,db)
+            orders_to_update += update_orders(total_to_be_recieved,orders)
             
             #Return the packages that are left over
             delivery.quantity_recieved -= pending_to_recieve
             packages_to_return.append(delivery)
             
     # Add the deliveries to the database
+    
+    db.execute(
+        update(models.Orders),
+        orders_to_update
+    )
     db.add_all(delivery_db)
 
-    if len(order_updates) > 0:
-        db.add_all(order_updates)
     db.commit()
     return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return}
 

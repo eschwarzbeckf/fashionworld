@@ -65,8 +65,8 @@ async def confirm_order(orders: List[ConfirmOrder], db:db_dependency):
     return {"message":"Orders Confirmed", "orders_ids":list(db_orders), "orders_not_found":not_found}
 
 @router.get("/fake",status_code=status.HTTP_200_OK)
-async def fake_order(db:db_dependency):
+async def fake_order():
     # creates fake data
-    data = create_fake_order(db)
+    data = create_fake_order()
 
     return data

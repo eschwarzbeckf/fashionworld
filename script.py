@@ -1,10 +1,12 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import Sequence, select, exists, text
+from sqlalchemy import Sequence, select, exists, text, Table
 import models
 import csv
+from database import metadata
 from datetime import datetime
 import pandas as pd
 from database import engine
+import random
 
 def add_initial_data(db: Session, supplier_id: Sequence):
     print("Application startup: Initializing...")
@@ -13,7 +15,7 @@ def add_initial_data(db: Session, supplier_id: Sequence):
     supplier_products = []
     BATCH_SIZE = 1000
     counter = 0
-    with open('./data/csv/supplierproducts_short.csv', 'r') as file:
+    with open('./data/csv/supplierproducts.csv', 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             supplier_name = row['SupplierName'].strip()
@@ -26,14 +28,6 @@ def add_initial_data(db: Session, supplier_id: Sequence):
                     supplier_id=supplier_id_value
                 ))
 
-                db.add(
-                    models.SupplierError(
-                        supplier_id=supplier_id_value,
-                        name=supplier_name,
-                        error_rate=0.05,
-                        packaging_quality_rate=0.01
-                    )
-                )
                 db.commit()
             else:
                 supplier_id_value = db.execute(select(models.Suppliers.supplier_id).where(models.Suppliers.name == supplier_name)).scalar()
@@ -153,7 +147,7 @@ def add_density_data(db: Session):
     CSV_PROCESSING_BATCH_SIZE = 1000
     curr_row = 0
     density_data = []
-    with open('./data/csv/density_short.csv', 'r') as f:
+    with open('./data/csv/density.csv', 'r') as f:
         reader = csv.DictReader(f)
 
         for row in reader:
@@ -215,8 +209,108 @@ def add_scorecard_data(db:Session):
         db.add_all(scorecard_db)
         db.commit()
 
-def add_supplier_error():
-    db_suppliers_products = pd.read_sql("SELECT s.name,sp.product_id FROM suppliers as s JOIN suppliers_products as sp ON sp.supplier_id = s.supplier_id", con=engine)
-    density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers_products as sp ON sp.product_id = d.product_id JOIN suppliers as s ON s.supplier_id = sp.supplier_id", con=engine)
-    density_suppliers = density.groupby(['date_of_report','name']).count()
-    density_products = density.groupby(['date_of_report','name','product_id']).count()
+def add_incidents(db:Session):
+    incidents_table = Table('incidents',metadata)
+    incidents_table.drop(engine,checkfirst=True)
+    incidents_table.create(engine,checkfirst=True)
+    incidents_db = []
+    BATCH_SIZE = 1000
+    curr_row = 0
+    suppliers = db.execute(select(models.Suppliers.name,models.Suppliers.supplier_id)).all()
+    supplier_ids = {supplier[0]:supplier[1] for supplier in suppliers}
+    with open('./data/csv/incidents.csv','r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            product_id = row["ProductReference"] + row["SupplierName"][-1]
+            incidents_db.append(models.Incidents(
+                    product_id=product_id.strip(),
+                    supplier_id=supplier_ids[row["SupplierName"]].strip(),
+                    date_of_incident=datetime.strptime(row['DateOfIncident'].strip(), '%Y-%m-%d'),
+                    issue_description=row["IssueDescription"].lower().strip(),
+                    cost_impact=float(row["CostImpact"])
+                )
+            )
+            curr_row += 1
+            if curr_row >= BATCH_SIZE:
+                db.add_all(incidents_db)
+                db.commit()
+                incidents_db=[]
+                curr_row =0
+
+        db.add_all(incidents_db)
+        db.commit()
+
+def rand_distr_prob(main:str,categories:list,main_prob:float) -> dict:
+    copy_cat = categories.copy()
+    remaining = 1 - main_prob
+    res = {main:main_prob}
+    copy_cat.remove(main)
+    for cat in copy_cat:
+        res[cat] = 0
+    loop = True
+    while loop:
+        for cat in copy_cat:
+            res[cat] += random.uniform(0.00000001,remaining)
+            remaining -= res[cat]
+            if remaining <= 0:
+                loop = False
+                break
+        
+        
+    return res
+
+def add_defects_rate(db:Session):
+    product_defects_rate_table = Table('products_defects_rate',metadata)
+    product_defects_rate_table.drop(engine,checkfirst=True)
+    product_defects_rate_table.create(engine,checkfirst=True)
+    productsdefectsrate_db = []
+    BATCH_SIZE = 1000
+    curr_row = 0
+
+    issues = list(pd.read_sql("SELECT DISTINCT(issue_description) FROM incidents",con=engine).values.ravel())
+    if 'none' not in issues:
+        issues += ['none']
+
+    products = pd.read_sql("""
+                           SELECT DISTINCT(p.product_id), pa.suggested_layout, pa.suggested_folding_method, pa.suggested_quantity
+                           FROM products as p 
+                           JOIN (select p1.product_id,p1.suggested_folding_method,p1.suggested_quantity,p1.suggested_layout,p1.revision from packaging as p1 where p1.revision = (select max(p2.revision) from packaging as p2 where p2.product_id = p1.product_id)) as pa ON p.product_id = pa.product_id;
+                           """,con=engine).values
+    
+    
+    for product in products:
+        good_package_quality_rate = random.uniform(.800000,.999999)
+        package_qualities_rates = [good_package_quality_rate,1-good_package_quality_rate]
+        for package_quality_rate in package_qualities_rates:
+            prob_distr = rand_distr_prob(
+                'none',
+                issues,
+                random.uniform(0.8943,0.99943) if package_quality_rate < good_package_quality_rate else random.uniform(0.7843,0.96382)
+                )
+            for issue in issues:
+                productsdefectsrate_db.append(
+                    models.ProductsDefectsRate(
+                        product_id=product[0],
+                        suggested_layout=product[1],
+                        suggested_folding_method=product[2],
+                        suggested_quantity=product[3],
+                        package_quality='bad'if package_quality_rate < good_package_quality_rate else 'good',
+                        package_quality_rate=package_quality_rate,
+                        issue_description=issue,
+                        defect_rate=prob_distr[issue]
+                    )
+                )
+                curr_row += 1
+
+                if curr_row >= BATCH_SIZE:
+                    db.add_all(productsdefectsrate_db)
+                    db.commit()
+                    curr_row = 0
+                    productsdefectsrate_db = []
+    
+    db.add_all(productsdefectsrate_db)
+    db.commit()
+
+    
+    
+    
