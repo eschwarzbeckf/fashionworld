@@ -14,7 +14,6 @@ The plan is to develop KPIs for suppliers to adhere, calcualte the impact and pr
 
 ## Technologies
 - Nifi
-- Ollama
 - MariaDB
 - Minio
 - Fastapi
@@ -26,8 +25,12 @@ Here goes a diagram
 ## Dashboard example
 
 ## How does it works
-  1. run docker-compose
-  2. install Tableau Desktop with MariaDB plugin
+  ### Presteps
+    - Ensure Docker is installed
+  ### Run in CMD
+  1. git clone https://www.github.com/eschwarzbeck/fashionworld.git
+  2. docker-compose up
+
 
 ## Value added propositions
  - LLM reads and saves data from providers and customers

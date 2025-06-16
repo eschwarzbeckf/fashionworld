@@ -20,6 +20,14 @@ density = pd.read_sql_query("SELECT d.*,s.name  FROM density as d JOIN suppliers
 density_suppliers = density.groupby(['date_of_report','name']).count()
 density_products = density.groupby(['date_of_report','name','product_id']).count()
 products_defects_rate = pd.read_sql("SELECT * FROM products_defects_rate", con=engine)
+grouped_defects = {
+    name: group[["issue_description","defect_rate"]].to_dict('list')
+    for name, group in products_defects_rate.groupby(["product_id","package_quality"])
+}
+grouped_packaging_quality = {
+    name: group[["package_quality_rate"]].to_dict('list')
+    for name, group in products_defects_rate[["product_id","package_quality","package_quality_rate"]].drop_duplicates().groupby(["product_id","package_quality"])
+}
 
 def create_fake_order() -> dict:
     # Data to return
@@ -101,7 +109,6 @@ def update_orders(total_to_be_recieved:int|float, orders:list):
     Return: total_to_be_recieved
     """
     # Select the orders that are relevant to the order and product, order them based on the boxes ordered
-    start_update_orders = time.time()
     orders_to_update =[]
     for order in orders:
         # For each order, check if the total recieved amount is less than the order,
@@ -121,34 +128,29 @@ def update_orders(total_to_be_recieved:int|float, orders:list):
             total_to_be_recieved =- order[3]
         elif total_to_be_recieved <= 0:
             break
-    end_update_orders = time.time()
-    print("Total Order Update TIme: ",end_update_orders - start_update_orders)
     return orders_to_update
 
 def assign_issue(delivery: RecievedDelivery) -> tuple:
-    global products_defects_rate
-    start_assign_issue = time.time()
     uuid = str(uuid4())
-    issues_rates = products_defects_rate[(products_defects_rate["product_id"] == delivery.product_id) & (products_defects_rate["package_quality"] == delivery.package_quality)][["issue_description","defect_rate"]]
-    issue = random.choices(issues_rates["issue_description"].unique(),issues_rates["defect_rate"].unique(),k=1)[0]
+    key = (delivery.product_id, delivery.package_quality)
+    rates_data = grouped_defects.get(key)
+    if not rates_data:
+        raise HTTPException(401,f"No defect rates found for {delivery.product_id}")
+    
+    issue = random.choices(rates_data["issue_description"],rates_data["defect_rate"],k=1)[0]
     product_issue = [models.ProductsDefects(
         uuid = uuid,
         product_id=delivery.product_id,
         issue=issue
     )]
-    end_assign_issue = time.time()
-    
-    print("End Assign Issue: ", end_assign_issue-start_assign_issue)
     return (uuid, product_issue)
 
-def recieve_process(deliveries:List[RecievedDelivery],id:str,db:Session) -> dict:
-    start_recieve_process = time.time()
-    rates = products_defects_rate[products_defects_rate["product_id"] == delivery.product_id]
-    qualities =  rates["package_quality"].unique()
-    qualities_rates = rates["package_quality_rate"].unique()
-    package_quality = choices(qualities,qualities_rates,k=1)[0]
+def recieve_process(delivery:RecievedDelivery,id:str,db:Session) -> dict:
+
+    good_quality = grouped_packaging_quality.get((delivery.product_id,'good'))["package_quality_rate"][0]
+    package_quality = choices(['good','bad'],[good_quality, 1-good_quality],k=1)[0]
     delivery.package_quality = package_quality
-    (uuid,product_issue) = assign_issue(deliveries)
+    (uuid,product_issue) = assign_issue(delivery)
     deliveries_accepted = []
     deliveries_accepted.append(models.Receptions(
         reception_id = id,
@@ -160,7 +162,6 @@ def recieve_process(deliveries:List[RecievedDelivery],id:str,db:Session) -> dict
         package_quality=delivery.package_quality
         )
     )
-    end_recieve_process = time.time()
-    print("Recieve Process Completed At: ", end_recieve_process - start_recieve_process)
+
     return {"deliveries_accepted":deliveries_accepted,"delivery":delivery, "issues":product_issue}
 
