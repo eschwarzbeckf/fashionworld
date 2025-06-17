@@ -10,7 +10,6 @@ from ..services.services import create_fake_delivery,update_orders, recieve_proc
 from .audits import create_audit
 import pandas as pd
 import numpy as np
-import time
 
 router = APIRouter(
     prefix="/api/db/receptions"
@@ -21,7 +20,6 @@ db_dependency = Annotated[Session, Depends(get_db)]
 
 @router.post("/deliveries", status_code=status.HTTP_201_CREATED)
 async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency):
-    start_process = time.time()
     if deliveries is None:
         raise HTTPException(status_code=400, detail="No order information provided.")
     
@@ -36,7 +34,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
     recieved_db = pd.read_sql("SELECT order_id, product_id, count(product_id) FROM receptions GROUP BY order_id, product_id", con=engine).values
     orders_to_update = []
     for delivery in deliveries:
-        start_loop = time.time()
         # query which orders are not filled and are confirmed
         orders = [order for order in filter(lambda x: x[0] == delivery.order_id and x[1] == delivery.product_id,orders_db)]
         # check the packages we have recieved
@@ -85,8 +82,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
             #Return the packages that are left over
             delivery.quantity_recieved -= pending_to_recieve
             packages_to_return.append(delivery)
-        end_loop = time.time()
-        print("Time loop completed: ", end_loop - start_loop)
     # Add the deliveries to the database
     
     db.execute(
@@ -97,9 +92,6 @@ async def package_recieved(deliveries: List[RecievedDelivery], db:db_dependency)
     db.add_all(product_issues)
 
     db.commit()
-    end_process = time.time()
-    total_time = end_process - start_process
-    print("Total time: ",total_time)
     return {"message":"Accepted deliveries","accepted_packages":delivery_db, "packages_to_return":packages_to_return}
 
 @router.get("/deliveries_fake", status_code=status.HTTP_201_CREATED)
