@@ -78,3 +78,8 @@ class AuditPlan(BaseModel):
     audit_criterias: List[AuditCriteria] = Field(description="The Audit Criteria to be used")
     sampling: Literal["random","model"] = Field(description="Type of sampling either using a ML model or random sampling", default="random")
     audit_quantity: int = Field(description="Total amount to check", default=5, ge=0)
+
+class InventoryItem(BaseModel):
+    audit_plan_name: str = Field(description="Name of the audit plan")
+    order_id: str = Field(description="Order ID")
+    order_status: str = Field(description="Status of the order", default="pass")

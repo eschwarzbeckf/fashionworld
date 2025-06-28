@@ -39,11 +39,15 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
         orders += f"\"{order}\"" if orders == "" else f",\"{order}\""
 
     receptions = pd.read_sql_query(f"""
-                                   SELECT r.*,p.garment_type,p.material,p.size,p.collection,p.weight 
+                                   SELECT r.*,p.garment_type,p.material,p.size,p.collection,s.name, pa.suggested_folding_method, pa.suggested_layout, pa.revision
                                    FROM receptions as r 
-                                   JOIN products as p on p.product_id = r.product_id 
+                                   LEFT JOIN products as p on p.product_id = r.product_id
+                                   LEFT JOIN suppliers_products as sp on sp.product_id = r.product_id
+                                   LEFT JOIN suppliers as s on s.supplier_id = sp.supplier_id
+                                   LEFT JOIN (select p1.product_id,p1.suggested_folding_method,p1.suggested_quantity,p1.suggested_layout,p1.revision from packaging as p1 where p1.revision = (select max(p2.revision) from packaging as p2 where p2.product_id = p1.product_id)) as pa on p.product_id = pa.product_id
                                    WHERE r.order_id IN ({orders})
                                    """, con=engine)
+    
     orders_db =   pd.read_sql_query(f"""
                                     SELECT o.order_id, o.item_no, o.order_status
                                     FROM orders as o
@@ -54,9 +58,14 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
         uuids += f"\"{item}\"" if uuids == "" else f",\"{item}\""
 
     products_issues_statuses = pd.read_sql_query(f"SELECT * FROM products_defects WHERE uuid IN ({uuids})",con=engine)
+    # 'name', 'issue_description', 'garment_type', 'material','suggested_folding_method', 'suggested_layout', 'size', 'collection'
 
+    
     receptions = receptions.set_index('package_uuid').join(products_issues_statuses.set_index('uuid'),rsuffix='_defects').rename(columns={"issue":"issue_description"})
-    x = receptions[['issue_description','garment_type','material','size','collection','weight']]
+    x = receptions[['name', 'issue_description', 'garment_type', 'material','suggested_folding_method', 'suggested_layout', 'size', 'collection']]
+    for col in x.select_dtypes(include='object').columns:
+        x[col] = x[col].str.lower()
+    
     cost_log = model.predict(x)
     cost = np.round(10**cost_log,2)
     receptions["estimated_cost"] = cost
@@ -69,10 +78,10 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
     results = {}
     for order in items:
         issues[order] = {}
-        results[order] = {"status":"pass","unknown":[]}
+        results[order] = {"audit_criteria":audit_name,"status":"pass","description":"passed audit","unknown":[]} #change this to pass
         for criteria in audit_criterias:
             all_reject_criterias += criteria["reject_categories"]
-            issues[order][criteria["criteria_name"]] = {"pass":0,"rejected":0} 
+            issues[order][criteria["criteria_name"]] = {"pass":0,"rejected":0}
             results[order][criteria["criteria_name"]] = {"pass":[],"rejected":[],"unknown":[]}
 
     audit_db = []
@@ -81,11 +90,9 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
         # Loop through each order
         audit_ended = False
         if sampling.lower() == "random":
-            if audit_quantity > 0:
-                item_audits = receptions[receptions["order_id"] == order].sample(audit_quantity,replace=False)
-                item_audits = random.shuffle(receptions) if len(item_audits) < audit_quantity else item_audits
-            else:
-                item_audits = random.shuffle(receptions[receptions["order_id"] == order])
+            item_audits = receptions[receptions["order_id"] == order]
+            item_audits = receptions[receptions["order_id"] == order].sample(audit_quantity,replace=False) if len(item_audits) >= audit_quantity else receptions[receptions["order_id"] == order].sample(frac=1,replace=False)
+
         elif sampling.lower() == "model":
             pass
         
@@ -148,13 +155,14 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
                 if accepted_quantity > -1:
                     if issues[order][criteria_name]["rejected"] > accepted_quantity:
                         audit_ended = True
-                        results[order]["status"]=f"rejected reached threshold for {criteria_name}"
+                        results[order]["status"]=f"rejected"
+                        results[order]["description"]=f"rejected reached threshold for {criteria_name}"
                         for idx2 in orders_db[orders_db["order_id"] == order].index:
                             update_orders.append(
                                 {
                                     "order_id":orders_db.loc[idx2,"order_id"],
                                     "item_no":orders_db.loc[idx2,"item_no"],
-                                    "order_status":"rejected",
+                                    "order_status":"audited", # change this to rejected
                                     "last_updated":datetime.now()
                                 }
                             )
@@ -174,7 +182,7 @@ def create_audit(items: List[str],audit_plan: AuditPlan, db:db_dependency,sampli
                     {
                         "order_id":orders_db.loc[idx3,"order_id"],
                         "item_no":orders_db.loc[idx3,"item_no"],
-                        "order_status":"pass",
+                        "order_status":"audited", #change this to pass
                         "last_updated":datetime.now()
                     }
                 )

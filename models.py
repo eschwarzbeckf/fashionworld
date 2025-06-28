@@ -33,6 +33,8 @@ class Products(Base):
     products_id_productsdefects: Mapped[List["ProductsDefects"]] = relationship(back_populates="parent_products")
     products_id_reportedincidents: Mapped[List["ReportedIncidents"]] = relationship(back_populates="parent_products")
     products_id_productsdefectsrate: Mapped[List["ProductsDefectsRate"]] = relationship(back_populates="parent_products")
+    products_id_inventory: Mapped[List["Inventory"]] = relationship(back_populates="parent_products")
+    products_id_shipments: Mapped[List["Shipments"]] = relationship(back_populates="parent_products")
     
 
 class Suppliers(Base):
@@ -110,7 +112,8 @@ class Orders(Base):
     parent_products: Mapped["Products"] = relationship(back_populates="product_id_orderitems")
     order_id_receptions: Mapped[List["Receptions"]] = relationship(back_populates="parent_orders")
     order_id_reportedissues: Mapped[List["ReportedIncidents"]] = relationship(back_populates="parent_orders")
-    
+    order_id_inventory: Mapped[List["Inventory"]] = relationship(back_populates="parent_orders")
+    order_id_shipments: Mapped[List["Shipments"]] = relationship(back_populates="parent_orders")
 
     __table_args__ = (
         PrimaryKeyConstraint('order_id','item_no', name='pk_order_item'),
@@ -185,6 +188,8 @@ class ProductsDefects(Base):
 
     parent_products:Mapped["Products"] = relationship(back_populates="products_id_productsdefects")
     productdefects_uuid_reportedissues:Mapped["ReportedIncidents"] = relationship(back_populates="parent_productsdefects")
+    uuid_inventory: Mapped[List["Inventory"]] = relationship(back_populates="parent_productsdefects")
+    uuid_shipments: Mapped[List["Shipments"]] = relationship(back_populates="parent_productsdefects")
 
 class ReportedIncidents(Base):
     __tablename__ = "reported_incidents"
@@ -231,4 +236,32 @@ class Incidents(Base):
     issue_description: Mapped[str] = mapped_column(String(40), nullable=False)
     cost_impact: Mapped[float] = mapped_column(Float(2), nullable=False)
     currency: Mapped[str] = mapped_column(String(5),nullable=False, default="EUR")
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+    inventory_no: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, index=True)
+    audit_plan_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    order_id: Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
+    uuid: Mapped[str] = mapped_column(String(36), ForeignKey('products_defects.uuid', ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    order_status: Mapped[str] = mapped_column(String(25), nullable=False, index=True)
+    rework_cost: Mapped[float] = mapped_column(Float(2), nullable=True)
+
+    parent_products:Mapped["Products"] = relationship(back_populates="products_id_inventory")
+    parent_orders:Mapped["Orders"] = relationship(back_populates="order_id_inventory")
+    parent_productsdefects:Mapped["ProductsDefects"] = relationship(back_populates="uuid_inventory")
+
+class Shipments(Base):
+    __tablename__ = "shipments"
+    shipment_id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, index=True)
+    product_id: Mapped[str] = mapped_column(String(9), ForeignKey('products.product_id', ondelete="CASCADE"), nullable=False, index=True)
+    uuid: Mapped[str] = mapped_column(String(36), ForeignKey('products_defects.uuid', ondelete="CASCADE"), nullable=False, index=True)
+    audit_plan_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    order_id: Mapped[str] = mapped_column(String(8), ForeignKey('orders.order_id', ondelete="CASCADE"), nullable=False, index=True)
+    issue_description: Mapped[str] = mapped_column(String(50), nullable=False)
+    cost_impact: Mapped[float] = mapped_column(Float(2), nullable=False)
+
+    parent_products:Mapped["Products"] = relationship(back_populates="products_id_shipments")
+    parent_orders:Mapped["Orders"] = relationship(back_populates="order_id_shipments")
+    parent_productsdefects:Mapped["ProductsDefects"] = relationship(back_populates="uuid_shipments")
     
